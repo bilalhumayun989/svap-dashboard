@@ -9,6 +9,7 @@ import Link from 'next/link'
 import Sidebar from '@/components/Sidebar'
 import StatusBadge from '@/components/StatusBadge'
 import OrderDetailActions from '@/components/OrderDetailActions'
+import { cancelOrderAndRestoreItems } from '@/lib/cancelOrder'
 import type { Order, OrderStatus } from '@/lib/types'
 
 // ─── Auth helper ──────────────────────────────────────────────────────────────
@@ -70,6 +71,11 @@ async function assignDeliveryType(id: string, type: 'courier' | 'self') {
   'use server'
   const db = createAdminClient()
   await db.from('orders').update({ delivery_type: type }).eq('id', id)
+}
+
+async function cancelOrder(id: string) {
+  'use server'
+  await cancelOrderAndRestoreItems(id)
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -218,7 +224,7 @@ export default async function OrderDetailPage({
                     </div>
                   ) : (
                     <p className="text-sm text-zinc-500 italic">
-                      Other party hasn't completed checkout yet.
+                      Other party hasn&apos;t completed checkout yet.
                     </p>
                   )}
                 </div>
@@ -273,6 +279,7 @@ export default async function OrderDetailPage({
               order={order}
               onUpdateStatus={updateOrderStatus}
               onAssignDelivery={assignDeliveryType}
+              onCancel={cancelOrder}
             />
           </div>
         </div>

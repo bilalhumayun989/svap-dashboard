@@ -7,6 +7,7 @@ import { createServerClient } from '@supabase/ssr'
 import { createAdminClient } from '@/lib/supabase'
 import Sidebar from '@/components/Sidebar'
 import OrdersClient from '@/components/OrdersClient'
+import { cancelOrderAndRestoreItems } from '@/lib/cancelOrder'
 import type { Order } from '@/lib/types'
 
 // ─── Auth helper (server-side, reads session cookie) ─────────────────────────
@@ -40,6 +41,11 @@ async function rejectOrder(id: string) {
   'use server'
   const db = createAdminClient()
   await db.from('orders').update({ status: 'cancelled' }).eq('id', id)
+}
+
+async function cancelOrder(id: string) {
+  'use server'
+  await cancelOrderAndRestoreItems(id)
 }
 
 async function assignDelivery(id: string, type: 'courier' | 'self') {
@@ -148,6 +154,7 @@ export default async function OrdersPage({
           initialStatus={statusFilter}
           onApprove={approveOrder}
           onReject={rejectOrder}
+          onCancel={cancelOrder}
           onAssignDelivery={assignDelivery}
           onMarkShipped={markShipped}
           onMarkDelivered={markDelivered}

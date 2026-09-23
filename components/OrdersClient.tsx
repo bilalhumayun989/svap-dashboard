@@ -12,6 +12,7 @@ interface OrdersClientProps {
   initialStatus: string
   onApprove: (id: string) => Promise<void>
   onReject: (id: string) => Promise<void>
+  onCancel: (id: string) => Promise<void>
   onAssignDelivery: (id: string, type: 'courier' | 'self') => Promise<void>
   onMarkShipped: (id: string, trackingNumber: string | null) => Promise<void>
   onMarkDelivered: (id: string) => Promise<void>
@@ -57,6 +58,7 @@ export default function OrdersClient({
   initialStatus,
   onApprove,
   onReject,
+  onCancel,
   onAssignDelivery,
   onMarkShipped,
   onMarkDelivered,
@@ -287,6 +289,19 @@ export default function OrdersClient({
                             className="px-3 py-1 text-xs font-semibold bg-green-500/15 text-green-400 border border-green-500/30 rounded-lg hover:bg-green-500/25 transition-colors disabled:opacity-50"
                           >
                             Mark Delivered
+                          </button>
+                        )}
+
+                        {!['cancelled', 'delivered'].includes(order.status) && (
+                          <button
+                            disabled={isPending}
+                            onClick={() => {
+                              if (confirm('Kya aap yeh order cancel karna chahte hain? Dono taraf ke orders cancel ho jayenge.'))
+                                run(() => onCancel(order.id))
+                            }}
+                            className="px-3 py-1 text-xs font-semibold bg-red-500/15 text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/25 transition-colors disabled:opacity-50"
+                          >
+                            Cancel Order &amp; Restore Items
                           </button>
                         )}
 

@@ -8,9 +8,10 @@ interface Props {
   order: Order
   onUpdateStatus: (id: string, status: OrderStatus, trackingNumber?: string) => Promise<void>
   onAssignDelivery: (id: string, type: 'courier' | 'self') => Promise<void>
+  onCancel: (id: string) => Promise<void>
 }
 
-export default function OrderDetailActions({ order, onUpdateStatus, onAssignDelivery }: Props) {
+export default function OrderDetailActions({ order, onUpdateStatus, onAssignDelivery, onCancel }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
@@ -114,6 +115,19 @@ export default function OrderDetailActions({ order, onUpdateStatus, onAssignDeli
           className="w-full py-2.5 rounded-lg bg-green-500/15 text-green-400 border border-green-500/30 text-sm font-semibold hover:bg-green-500/25 transition-colors disabled:opacity-50"
         >
           ✓ Mark as Delivered
+        </button>
+      )}
+
+      {!['cancelled', 'delivered'].includes(order.status) && (
+        <button
+          disabled={isPending}
+          onClick={() => {
+            if (confirm('Kya aap yeh order cancel karna chahte hain? Dono taraf ke orders cancel ho jayenge.'))
+              run(() => onCancel(order.id))
+          }}
+          className="w-full py-2.5 rounded-lg bg-red-500/15 text-red-400 border border-red-500/30 text-sm font-semibold hover:bg-red-500/25 transition-colors disabled:opacity-50"
+        >
+          Cancel Order &amp; Restore Items
         </button>
       )}
 
