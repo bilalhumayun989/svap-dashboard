@@ -41,6 +41,17 @@ function DeliveryTypeBadge({ type }: { type: 'courier' | 'self' | null }) {
   )
 }
 
+function isImageTransactionRef(value: string | null | undefined) {
+  if (!value) return false
+
+  const trimmed = value.trim()
+  if (!trimmed || !/^https?:\/\//i.test(trimmed)) return false
+
+  const noQuery = trimmed.split('?')[0].toLowerCase()
+  return /\.(png|jpe?g|gif|webp|bmp|svg|avif|heic|heif)(?:#.*)?$/i.test(noQuery)
+    || noQuery.includes('/storage/v1/object/')
+}
+
 export default function OrdersClient({
   orders,
   initialStatus,
@@ -91,7 +102,7 @@ export default function OrdersClient({
               {unassigned.length} confirmed order{unassigned.length > 1 ? 's' : ''} awaiting delivery assignment
             </p>
             <p className="text-amber-400/70 text-xs mt-0.5">
-              Filter by "Confirmed" to assign courier or self-delivery
+              Filter by &apos;Confirmed&apos; to assign courier or self-delivery
             </p>
           </div>
         </div>
@@ -136,7 +147,7 @@ export default function OrdersClient({
                 <tr className="text-zinc-500 text-xs uppercase tracking-wider border-b border-zinc-800">
                   <th className="text-left px-6 py-3">Customer</th>
                   <th className="text-left px-6 py-3">City</th>
-                  <th className="text-left px-6 py-3">Txn Ref</th>
+                  <th className="text-left px-3 py-3 w-[110px]">Txn Ref</th>
                   <th className="text-left px-6 py-3">Total</th>
                   <th className="text-left px-6 py-3">Status</th>
                   <th className="text-left px-6 py-3">Delivery</th>
@@ -145,31 +156,58 @@ export default function OrdersClient({
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((order) => (
-                  <tr
-                    key={order.id}
-                    className={`border-b border-zinc-800/60 hover:bg-zinc-800/30 transition-colors ${
-                      order.status === 'confirmed' && !order.delivery_type
-                        ? 'bg-amber-500/5'
-                        : ''
-                    }`}
-                  >
-                    <td className="px-6 py-3">
-                      <Link
-                        href={`/orders/${order.id}`}
-                        className="font-medium hover:text-orange-400 transition-colors"
-                      >
-                        {order.delivery_name}
-                      </Link>
-                      <p className="text-xs text-zinc-500">{order.delivery_phone}</p>
-                    </td>
-                    <td className="px-6 py-3 text-zinc-400">{order.delivery_city}</td>
-                    <td className="px-6 py-3 font-mono text-xs text-zinc-300">
-                      {order.transaction_ref ?? '—'}
-                    </td>
-                    <td className="px-6 py-3 text-orange-400 font-semibold">
-                      PKR {order.total.toLocaleString()}
-                    </td>
+                {filtered.map((order) => {
+                  const txnRef = order.transaction_ref?.trim()
+                  const isImageRef = isImageTransactionRef(txnRef ?? null)
+
+                  return (
+                    <tr
+                      key={order.id}
+                      className={`border-b border-zinc-800/60 hover:bg-zinc-800/30 transition-colors ${
+                        order.status === 'confirmed' && !order.delivery_type
+                          ? 'bg-amber-500/5'
+                          : ''
+                      }`}
+                    >
+                      <td className="px-6 py-3">
+                        <Link
+                          href={`/orders/${order.id}`}
+                          className="font-medium hover:text-orange-400 transition-colors"
+                        >
+                          {order.delivery_name}
+                        </Link>
+                        <p className="text-xs text-zinc-500">{order.delivery_phone}</p>
+                      </td>
+                      <td className="px-6 py-3 text-zinc-400">{order.delivery_city}</td>
+                      <td className="px-3 py-3 align-middle">
+                        <div className="flex items-center justify-start min-w-[72px]">
+                          {txnRef ? (
+                            isImageRef ? (
+                              <a
+                                href={txnRef}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex h-10 w-10 items-center justify-center overflow-hidden rounded-md border border-zinc-700 bg-zinc-950 shadow-sm transition-colors hover:border-orange-500/60 hover:shadow-orange-500/10"
+                                aria-label={`Open payment screenshot for ${order.delivery_name}`}
+                              >
+                                <img
+                                  src={txnRef}
+                                  alt="Payment screenshot"
+                                  className="h-10 w-10 object-cover block"
+                                  loading="lazy"
+                                />
+                              </a>
+                            ) : (
+                              <span className="font-mono text-[11px] text-zinc-300 break-all">{txnRef}</span>
+                            )
+                          ) : (
+                            <span className="text-zinc-600">—</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-3 text-orange-400 font-semibold">
+                        PKR {order.total.toLocaleString()}
+                      </td>
                     <td className="px-6 py-3">
                       <StatusBadge status={order.status as OrderStatus} />
                     </td>
@@ -261,7 +299,8 @@ export default function OrdersClient({
                       </div>
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>
