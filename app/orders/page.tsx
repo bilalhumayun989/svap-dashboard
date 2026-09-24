@@ -128,38 +128,51 @@ export default async function OrdersPage({
   ).length
 
   return (
-    <div className="flex min-h-screen">
-      <Sidebar />
-      <main className="flex-1 p-8 overflow-auto">
-        <div className="flex items-center justify-between mb-1">
-          <h1 className="text-2xl font-black text-zinc-100">Orders</h1>
-          {pendingCount > 0 && (
-            <span className="inline-flex items-center gap-1.5 bg-yellow-500/15 text-yellow-400 border border-yellow-500/30 rounded-full px-3 py-1 text-xs font-bold">
-              ⚠️ {pendingCount} pending verification
-            </span>
-          )}
-        </div>
-        <p className="text-zinc-500 text-sm mb-6">
-          Manage, verify and assign deliveries — {allOrders.length} total order{allOrders.length !== 1 ? 's' : ''}
+   <div className="flex min-h-screen bg-black text-zinc-100 font-sans selection:bg-zinc-800 selection:text-white">
+  <Sidebar />
+  <main className="flex-1 p-3 sm:p-6 overflow-x-hidden min-w-0">
+    {/* Top Header Section */}
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-1">
+      <div>
+        <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">Orders</h1>
+        <p className="text-zinc-500 text-xs sm:text-sm mt-0.5 font-medium">
+          Manage, verify and assign deliveries — <span className="text-zinc-300 font-semibold">{allOrders.length}</span> total order{allOrders.length !== 1 ? 's' : ''}
         </p>
+      </div>
 
-        {error && (
-          <div className="mb-4 bg-red-500/10 border border-red-500/30 rounded-xl px-5 py-4 text-red-400 text-sm">
-            <strong>Error loading orders:</strong> {error.message}
-          </div>
-        )}
-
-        <OrdersClient
-          orders={allOrders}
-          initialStatus={statusFilter}
-          onApprove={approveOrder}
-          onReject={rejectOrder}
-          onCancel={cancelOrder}
-          onAssignDelivery={assignDelivery}
-          onMarkShipped={markShipped}
-          onMarkDelivered={markDelivered}
-        />
-      </main>
+      {pendingCount > 0 && (
+        <div className="self-start sm:self-auto">
+          <span className="inline-flex items-center gap-1.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full px-3 py-1 text-xs font-semibold">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+            {pendingCount} pending verification
+          </span>
+        </div>
+      )}
     </div>
+
+    {/* Error Banner */}
+    {error && (
+      <div className="my-4 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3 text-red-400 text-xs sm:text-sm flex items-center justify-between">
+        <div>
+          <strong className="font-semibold">Error loading orders:</strong> {error.message}
+        </div>
+      </div>
+    )}
+
+    {/* Orders Table Container */}
+    <div className="mt-4">
+      <OrdersClient
+        orders={allOrders}
+        initialStatus={statusFilter}
+        onApprove={approveOrder}
+        onReject={rejectOrder}
+        onCancel={cancelOrder}
+        onAssignDelivery={assignDelivery}
+        onMarkShipped={markShipped}
+        onMarkDelivered={markDelivered}
+      />
+    </div>
+  </main>
+</div>
   )
 }
