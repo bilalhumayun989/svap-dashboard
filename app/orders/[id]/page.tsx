@@ -113,21 +113,20 @@ async function updateOrderStatus(id: string, status: OrderStatus, trackingNumber
   if (status === 'product_verification') {
     await fixNotifications(db, id, order.from_user_id, partnerUserId,
       'Payment Verified ✅',
-      'Aapka payment verify ho gaya! Hum ab aapke item ko dispatch ke liye check kar rahe hain.',
-      partnerUserId ? 'Swap Partner Update 🔄' : null,
-      partnerUserId ? 'Aapke swap partner ne apna payment confirm kar liya hai. Aapka apna order independent process hoga.' : null,
+      'Your payment has been verified! We are now checking your item before dispatch.',
+      partnerUserId ? 'Svap Partner Update 🔄' : null,
+      partnerUserId ? 'Your svap partner has confirmed their payment. Your own order will be processed independently.' : null,
     )
   } else if (status === 'shipped') {
-    const trackingNote = trackingNumber ? ` Tracking: ${trackingNumber}` : ''
-    const deliveryNote = order.delivery_type === 'self' ? 'Rider seedha aapke paas aa raha hai.' : 'Courier service ke zariye bheja ja raha hai.'
+    const trackingNote = trackingNumber ? ` Tracking number: ${trackingNumber}` : ''
+    const deliveryNote = order.delivery_type === 'self' ? 'Our rider is on the way to you.' : 'Your item is being sent via courier.'
     await fixNotifications(db, id, order.from_user_id, partnerUserId,
       'Order Shipped 📦',
-      `Aapka order ship ho gaya! ${deliveryNote}${trackingNote}`,
-      partnerUserId ? 'Swap Partner Update 📦' : null,
-      partnerUserId ? 'Aapke swap partner ka item ship ho gaya hai. Aapka apna order alag process ho raha hai.' : null,
+      `Your order has been shipped! ${deliveryNote}${trackingNote}`,
+      partnerUserId ? 'Svap Partner Update 📦' : null,
+      partnerUserId ? 'Your svap partner\'s item has been shipped. Your own order is being processed separately.' : null,
     )
   } else if (status === 'delivered') {
-    // Check if both orders are now delivered
     const { data: swapOrders } = order.swap_request_id
       ? await db.from('orders').select('id, status').eq('swap_request_id', order.swap_request_id)
       : { data: [] }
@@ -142,16 +141,16 @@ async function updateOrderStatus(id: string, status: OrderStatus, trackingNumber
 
     await fixNotifications(db, id, order.from_user_id, partnerUserId,
       'Order Delivered 🎉',
-      'Aapka item deliver ho gaya! Svap mubarak ho.',
-      partnerUserId && !allDelivered ? 'Swap Partner Update ✅' : null,
-      partnerUserId && !allDelivered ? 'Aapke swap partner ka item deliver ho gaya hai. Jab aapka item bhi deliver hoga, aapko alag notification milegi.' : null,
+      'Your item has been delivered! Enjoy your svap.',
+      partnerUserId && !allDelivered ? 'Svap Partner Update ✅' : null,
+      partnerUserId && !allDelivered ? 'Your svap partner\'s item has been delivered. You will receive a separate notification when your item is delivered.' : null,
     )
   } else if (status === 'cancelled') {
     await fixNotifications(db, id, order.from_user_id, partnerUserId,
       'Order Cancelled ❌',
-      'Aapka order cancel ho gaya. Kripya support se rabta karein.',
+      'Your order has been cancelled. Please contact support for assistance.',
       partnerUserId ? 'Swap Update ⚠️' : null,
-      partnerUserId ? 'Aapke swap partner ka order cancel ho gaya.' : null,
+      partnerUserId ? 'Your swap partner\'s order has been cancelled.' : null,
     )
   }
 }

@@ -115,12 +115,10 @@ async function approveOrder(id: string) {
     id,
     order.from_user_id,
     partnerUserId,
-    // Owner: their payment was verified
     'Payment Verified ✅',
-    'Aapka payment verify ho gaya! Hum ab aapke item ko dispatch ke liye check kar rahe hain.',
-    // Partner: only notify if they have an order — different wording
-    partnerUserId ? 'Swap Partner Update 🔄' : null,
-    partnerUserId ? 'Aapke swap partner ne apna payment confirm kar liya hai. Aapka apna order independent process hoga.' : null,
+    'Your payment has been verified! We are now checking your item before dispatch.',
+    partnerUserId ? 'Svap Partner Update 🔄' : null,
+    partnerUserId ? 'Your svap partner has confirmed their payment. Your own order will be processed independently.' : null,
   )
 }
 
@@ -156,9 +154,9 @@ async function rejectOrder(id: string) {
     order.from_user_id,
     partnerUserId,
     'Payment Rejected ❌',
-    'Aapka payment verify nahi ho saka. Kripya support se rabta karein.',
-    partnerUserId ? 'Swap Update ⚠️' : null,
-    partnerUserId ? 'Aapke swap partner ka payment reject ho gaya. Is swap ka aage proceed nahi hoga.' : null,
+    'Your payment could not be verified. Please contact support for assistance.',
+    partnerUserId ? 'Svap Update ⚠️' : null,
+    partnerUserId ? 'Your svap partner\'s payment was rejected. This swap will not proceed further.' : null,
   )
 }
 
@@ -202,8 +200,8 @@ async function markShipped(id: string, trackingNumber: string | null) {
     partnerUserId = partnerOrder?.from_user_id ?? null
   }
 
-  const trackingNote = trackingNumber ? ` Tracking: ${trackingNumber}` : ''
-  const deliveryNote = order.delivery_type === 'self' ? 'Rider seedha aapke paas aa raha hai.' : 'Courier service ke zariye bheja ja raha hai.'
+  const trackingNote = trackingNumber ? ` Tracking number: ${trackingNumber}` : ''
+  const deliveryNote = order.delivery_type === 'self' ? 'Our rider is on the way to you.' : 'Your item is being sent via courier.'
 
   await fixNotifications(
     db,
@@ -211,9 +209,9 @@ async function markShipped(id: string, trackingNumber: string | null) {
     order.from_user_id,
     partnerUserId,
     'Order Shipped 📦',
-    `Aapka order ship ho gaya! ${deliveryNote}${trackingNote}`,
-    partnerUserId ? 'Swap Partner Update 📦' : null,
-    partnerUserId ? 'Aapke swap partner ka item ship ho gaya hai. Aapka apna order alag process ho raha hai.' : null,
+    `Your order has been shipped! ${deliveryNote}${trackingNote}`,
+    partnerUserId ? 'Svap Partner Update 📦' : null,
+    partnerUserId ? 'Your svap partner\'s item has been shipped. Your own order is being processed separately.' : null,
   )
 }
 
@@ -268,10 +266,9 @@ async function markDelivered(id: string) {
     order.from_user_id,
     partnerUserId,
     'Order Delivered 🎉',
-    'Aapka item deliver ho gaya! Svap mubarak ho.',
-    // Only notify partner if their side is NOT yet delivered (otherwise they'll get their own)
-    partnerUserId && !allDelivered ? 'Swap Partner Update ✅' : null,
-    partnerUserId && !allDelivered ? 'Aapke swap partner ka item deliver ho gaya hai. Jab aapka item bhi deliver hoga, aapko alag notification milegi.' : null,
+    'Your item has been delivered! Enjoy your svap.',
+    partnerUserId && !allDelivered ? 'Svap Partner Update ✅' : null,
+    partnerUserId && !allDelivered ? 'Your svap partner\'s item has been delivered. You will receive a separate notification when your item is delivered.' : null,
   )
 }
 

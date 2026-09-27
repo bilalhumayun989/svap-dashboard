@@ -88,7 +88,7 @@ export default function ProductsPage() {
             >
               <option value="all">All Statuses</option>
               <option value="active">Active</option>
-              <option value="swapped">Swapped</option>
+              <option value="swapped">Svapped</option>
               <option value="removed">Removed</option>
             </select>
           </div>
