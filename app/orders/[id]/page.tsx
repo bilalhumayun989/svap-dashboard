@@ -40,38 +40,119 @@ async function getSessionUser() {
   return user
 }
 
+// ─── Notification Helper (same logic as orders/page.tsx) ─────────────────────
+async function fixNotifications(
+  db: ReturnType<typeof createAdminClient>,
+  orderId: string,
+  ownUserId: string,
+  partnerUserId: string | null,
+  ownTitle: string,
+  ownBody: string,
+  partnerTitle: string | null,
+  partnerBody: string | null,
+) {
+  const cutoff = new Date(Date.now() - 30_000).toISOString()
+  await db
+    .from('notifications')
+    .delete()
+    .in('user_id', partnerUserId ? [ownUserId, partnerUserId] : [ownUserId])
+    .eq('type', 'order_status')
+    .gte('created_at', cutoff)
+
+  await db.from('notifications').insert({
+    user_id: ownUserId,
+    type: 'order_status',
+    title: ownTitle,
+    body: ownBody,
+    route: '/orders',
+  })
+
+  if (partnerUserId && partnerTitle && partnerBody) {
+    await db.from('notifications').insert({
+      user_id: partnerUserId,
+      type: 'order_status',
+      title: partnerTitle,
+      body: partnerBody,
+      route: '/orders',
+    })
+  }
+}
+
 // ─── Server Actions ───────────────────────────────────────────────────────────
 async function updateOrderStatus(id: string, status: OrderStatus, trackingNumber?: string) {
   'use server'
   const db = createAdminClient()
+
+  const { data: order } = await db
+    .from('orders')
+    .select('from_user_id, swap_request_id, delivery_type')
+    .eq('id', id)
+    .single()
+
   const update: Record<string, unknown> = { status }
   if (trackingNumber) update.tracking_number = trackingNumber
   await db.from('orders').update(update).eq('id', id)
 
-  if (status === 'delivered') {
-    const { data: order } = await db
+  if (!order) return
+
+  // Find partner
+  let partnerUserId: string | null = null
+  let partnerOrderStatus: string | null = null
+  if (order.swap_request_id) {
+    const { data: partnerOrder } = await db
       .from('orders')
-      .select('swap_request_id')
-      .eq('id', id)
-      .single()
+      .select('from_user_id, status')
+      .eq('swap_request_id', order.swap_request_id)
+      .neq('id', id)
+      .maybeSingle()
+    partnerUserId = partnerOrder?.from_user_id ?? null
+    partnerOrderStatus = partnerOrder?.status ?? null
+  }
 
-    if (order?.swap_request_id) {
-      const { data: swapOrders } = await db
-        .from('orders')
-        .select('id, status')
-        .eq('swap_request_id', order.swap_request_id)
+  // Notification wording per stage
+  if (status === 'product_verification') {
+    await fixNotifications(db, id, order.from_user_id, partnerUserId,
+      'Payment Verified ✅',
+      'Aapka payment verify ho gaya! Hum ab aapke item ko dispatch ke liye check kar rahe hain.',
+      partnerUserId ? 'Swap Partner Update 🔄' : null,
+      partnerUserId ? 'Aapke swap partner ne apna payment confirm kar liya hai. Aapka apna order independent process hoga.' : null,
+    )
+  } else if (status === 'shipped') {
+    const trackingNote = trackingNumber ? ` Tracking: ${trackingNumber}` : ''
+    const deliveryNote = order.delivery_type === 'self' ? 'Rider seedha aapke paas aa raha hai.' : 'Courier service ke zariye bheja ja raha hai.'
+    await fixNotifications(db, id, order.from_user_id, partnerUserId,
+      'Order Shipped 📦',
+      `Aapka order ship ho gaya! ${deliveryNote}${trackingNote}`,
+      partnerUserId ? 'Swap Partner Update 📦' : null,
+      partnerUserId ? 'Aapke swap partner ka item ship ho gaya hai. Aapka apna order alag process ho raha hai.' : null,
+    )
+  } else if (status === 'delivered') {
+    // Check if both orders are now delivered
+    const { data: swapOrders } = order.swap_request_id
+      ? await db.from('orders').select('id, status').eq('swap_request_id', order.swap_request_id)
+      : { data: [] }
 
-      const allDelivered =
-        (swapOrders ?? []).length >= 2 &&
-        (swapOrders ?? []).every((o: { status: string }) => o.status === 'delivered')
+    const allDelivered =
+      (swapOrders ?? []).length >= 2 &&
+      (swapOrders ?? []).every((o: { status: string }) => o.status === 'delivered')
 
-      if (allDelivered) {
-        await db
-          .from('swap_requests')
-          .update({ status: 'completed' })
-          .eq('id', order.swap_request_id)
-      }
+    if (allDelivered && order.swap_request_id) {
+      await db.from('swap_requests').update({ status: 'completed' }).eq('id', order.swap_request_id)
     }
+
+    await fixNotifications(db, id, order.from_user_id, partnerUserId,
+      'Order Delivered 🎉',
+      'Aapka item deliver ho gaya! Svap mubarak ho.',
+      partnerUserId && !allDelivered ? 'Swap Partner Update ✅' : null,
+      partnerUserId && !allDelivered ? 'Aapke swap partner ka item deliver ho gaya hai. Jab aapka item bhi deliver hoga, aapko alag notification milegi.' : null,
+    )
+  } else if (status === 'cancelled') {
+    await fixNotifications(db, id, order.from_user_id, partnerUserId,
+      'Order Cancelled ❌',
+      'Aapka order cancel ho gaya. Kripya support se rabta karein.',
+      partnerUserId ? 'Swap Update ⚠️' : null,
+      partnerUserId ? 'Aapke swap partner ka order cancel ho gaya.' : null,
+    )
   }
 }
 

@@ -30,33 +30,136 @@ async function getSessionUser() {
   return user
 }
 
+// ─── Notification Helper ──────────────────────────────────────────────────────
+// The DB trigger (on_order_status_change) fires on ANY status update and sends
+// the SAME notification to BOTH swap partners — which is wrong when only one
+// order changed. This helper:
+//   1. Deletes the trigger-generated notifications for this order (fired within
+//      the last 10 seconds, so we catch only the ones just created).
+//   2. Inserts precise, context-aware notifications for the right users.
+
+async function fixNotifications(
+  db: ReturnType<typeof createAdminClient>,
+  orderId: string,         // the order whose status just changed
+  ownUserId: string,       // user whose order was actually updated
+  partnerUserId: string | null, // swap partner (may not have an order yet)
+  ownTitle: string,
+  ownBody: string,
+  partnerTitle: string | null,  // null = don't notify partner
+  partnerBody: string | null,
+) {
+  // Delete trigger-generated notifications for both users about THIS order
+  // (created within last 30s to avoid touching older real notifications)
+  const cutoff = new Date(Date.now() - 30_000).toISOString()
+  await db
+    .from('notifications')
+    .delete()
+    .in('user_id', partnerUserId ? [ownUserId, partnerUserId] : [ownUserId])
+    .eq('type', 'order_status')
+    .gte('created_at', cutoff)
+
+  // Insert correct notification for the order owner
+  await db.from('notifications').insert({
+    user_id: ownUserId,
+    type: 'order_status',
+    title: ownTitle,
+    body: ownBody,
+    route: '/orders',
+  })
+
+  // Insert separate (different wording) notification for partner — only if
+  // partner exists AND we have something meaningful to tell them
+  if (partnerUserId && partnerTitle && partnerBody) {
+    await db.from('notifications').insert({
+      user_id: partnerUserId,
+      type: 'order_status',
+      title: partnerTitle,
+      body: partnerBody,
+      route: '/orders',
+    })
+  }
+}
+
 // ─── Server Actions ───────────────────────────────────────────────────────────
 
-// payment_verification → approve → product_verification
-// product_verification: assign delivery (courier/self), then mark shipped
+// Step 1: payment_verification → product_verification
 async function approveOrder(id: string) {
   'use server'
   const db = createAdminClient()
 
   const { data: order } = await db
     .from('orders')
-    .select('status')
+    .select('id, status, from_user_id, swap_request_id')
     .eq('id', id)
     .single()
 
-  if (!order) return
+  if (!order || order.status !== 'payment_verification') return
 
-  // Only payment_verification can be approved here → moves to product_verification
-  if (order.status === 'payment_verification') {
-    await db.from('orders').update({ status: 'product_verification' }).eq('id', id)
+  // Update only THIS order
+  await db.from('orders').update({ status: 'product_verification' }).eq('id', id)
+
+  // Find partner's user_id (if they have a linked order)
+  let partnerUserId: string | null = null
+  if (order.swap_request_id) {
+    const { data: partnerOrder } = await db
+      .from('orders')
+      .select('from_user_id')
+      .eq('swap_request_id', order.swap_request_id)
+      .neq('id', id)
+      .maybeSingle()
+    partnerUserId = partnerOrder?.from_user_id ?? null
   }
-  // product_verification stage is handled via assignDelivery + markShipped
+
+  await fixNotifications(
+    db,
+    id,
+    order.from_user_id,
+    partnerUserId,
+    // Owner: their payment was verified
+    'Payment Verified ✅',
+    'Aapka payment verify ho gaya! Hum ab aapke item ko dispatch ke liye check kar rahe hain.',
+    // Partner: only notify if they have an order — different wording
+    partnerUserId ? 'Swap Partner Update 🔄' : null,
+    partnerUserId ? 'Aapke swap partner ne apna payment confirm kar liya hai. Aapka apna order independent process hoga.' : null,
+  )
 }
 
 async function rejectOrder(id: string) {
   'use server'
   const db = createAdminClient()
+
+  const { data: order } = await db
+    .from('orders')
+    .select('from_user_id, swap_request_id')
+    .eq('id', id)
+    .single()
+
   await db.from('orders').update({ status: 'cancelled' }).eq('id', id)
+
+  if (!order) return
+
+  // Find partner
+  let partnerUserId: string | null = null
+  if (order.swap_request_id) {
+    const { data: partnerOrder } = await db
+      .from('orders')
+      .select('from_user_id')
+      .eq('swap_request_id', order.swap_request_id)
+      .neq('id', id)
+      .maybeSingle()
+    partnerUserId = partnerOrder?.from_user_id ?? null
+  }
+
+  await fixNotifications(
+    db,
+    id,
+    order.from_user_id,
+    partnerUserId,
+    'Payment Rejected ❌',
+    'Aapka payment verify nahi ho saka. Kripya support se rabta karein.',
+    partnerUserId ? 'Swap Update ⚠️' : null,
+    partnerUserId ? 'Aapke swap partner ka payment reject ho gaya. Is swap ka aage proceed nahi hoga.' : null,
+  )
 }
 
 async function cancelOrder(id: string) {
@@ -67,37 +170,87 @@ async function cancelOrder(id: string) {
 async function assignDelivery(id: string, type: 'courier' | 'self') {
   'use server'
   const db = createAdminClient()
+  // delivery_type assignment does not change status — no notification needed
   await db.from('orders').update({ delivery_type: type }).eq('id', id)
 }
 
 async function markShipped(id: string, trackingNumber: string | null) {
   'use server'
   const db = createAdminClient()
+
+  const { data: order } = await db
+    .from('orders')
+    .select('from_user_id, swap_request_id, delivery_type')
+    .eq('id', id)
+    .single()
+
   await db
     .from('orders')
     .update({ status: 'shipped', ...(trackingNumber ? { tracking_number: trackingNumber } : {}) })
     .eq('id', id)
+
+  if (!order) return
+
+  let partnerUserId: string | null = null
+  if (order.swap_request_id) {
+    const { data: partnerOrder } = await db
+      .from('orders')
+      .select('from_user_id')
+      .eq('swap_request_id', order.swap_request_id)
+      .neq('id', id)
+      .maybeSingle()
+    partnerUserId = partnerOrder?.from_user_id ?? null
+  }
+
+  const trackingNote = trackingNumber ? ` Tracking: ${trackingNumber}` : ''
+  const deliveryNote = order.delivery_type === 'self' ? 'Rider seedha aapke paas aa raha hai.' : 'Courier service ke zariye bheja ja raha hai.'
+
+  await fixNotifications(
+    db,
+    id,
+    order.from_user_id,
+    partnerUserId,
+    'Order Shipped 📦',
+    `Aapka order ship ho gaya! ${deliveryNote}${trackingNote}`,
+    partnerUserId ? 'Swap Partner Update 📦' : null,
+    partnerUserId ? 'Aapke swap partner ka item ship ho gaya hai. Aapka apna order alag process ho raha hai.' : null,
+  )
 }
 
 async function markDelivered(id: string) {
   'use server'
   const db = createAdminClient()
-  await db.from('orders').update({ status: 'delivered' }).eq('id', id)
 
-  // If both orders for the same swap are now delivered → complete the swap
   const { data: order } = await db
     .from('orders')
-    .select('swap_request_id')
+    .select('from_user_id, swap_request_id')
     .eq('id', id)
     .single()
 
-  if (order?.swap_request_id) {
+  await db.from('orders').update({ status: 'delivered' }).eq('id', id)
+
+  if (!order) return
+
+  let partnerUserId: string | null = null
+  let allDelivered = false
+
+  if (order.swap_request_id) {
+    const { data: partnerOrder } = await db
+      .from('orders')
+      .select('from_user_id, status')
+      .eq('swap_request_id', order.swap_request_id)
+      .neq('id', id)
+      .maybeSingle()
+
+    partnerUserId = partnerOrder?.from_user_id ?? null
+
+    // Check if both sides are now delivered
     const { data: swapOrders } = await db
       .from('orders')
       .select('id, status')
       .eq('swap_request_id', order.swap_request_id)
 
-    const allDelivered =
+    allDelivered =
       (swapOrders ?? []).length >= 2 &&
       (swapOrders ?? []).every((o: { status: string }) => o.status === 'delivered')
 
@@ -108,6 +261,18 @@ async function markDelivered(id: string) {
         .eq('id', order.swap_request_id)
     }
   }
+
+  await fixNotifications(
+    db,
+    id,
+    order.from_user_id,
+    partnerUserId,
+    'Order Delivered 🎉',
+    'Aapka item deliver ho gaya! Svap mubarak ho.',
+    // Only notify partner if their side is NOT yet delivered (otherwise they'll get their own)
+    partnerUserId && !allDelivered ? 'Swap Partner Update ✅' : null,
+    partnerUserId && !allDelivered ? 'Aapke swap partner ka item deliver ho gaya hai. Jab aapka item bhi deliver hoga, aapko alag notification milegi.' : null,
+  )
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
