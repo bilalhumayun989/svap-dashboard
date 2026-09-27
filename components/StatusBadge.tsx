@@ -1,8 +1,8 @@
 import type { OrderStatus } from '@/lib/types'
 
 const config: Record<OrderStatus, { label: string; className: string }> = {
-  pending_verification: { label: 'Pending Verification', className: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30' },
-  confirmed:            { label: 'Confirmed',            className: 'bg-blue-500/15 text-blue-400 border-blue-500/30' },
+  payment_verification: { label: 'Payment Verification', className: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30' },
+  product_verification: { label: 'Product Verification', className: 'bg-orange-500/15 text-orange-400 border-orange-500/30' },
   shipped:              { label: 'Shipped',              className: 'bg-purple-500/15 text-purple-400 border-purple-500/30' },
   delivered:            { label: 'Delivered',            className: 'bg-green-500/15 text-green-400 border-green-500/30' },
   cancelled:            { label: 'Cancelled',            className: 'bg-red-500/15 text-red-400 border-red-500/30' },

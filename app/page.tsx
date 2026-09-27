@@ -72,11 +72,11 @@ export default function Dashboard() {
         swappedProdRes,
         recentOrdersRes
       ] = await Promise.all([
-        // 1. Pending Verification Count (or pending)
+        // 1. Pending Verification Count (payment_verification OR product_verification)
         supabase
           .from('orders')
           .select('id', { count: 'exact', head: true })
-          .ilike('status', 'pending%'),
+          .in('status', ['payment_verification', 'product_verification', 'pending_verification']),
 
         // 2. Delivered Orders Count
         supabase

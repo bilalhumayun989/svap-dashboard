@@ -31,10 +31,26 @@ async function getSessionUser() {
 }
 
 // ─── Server Actions ───────────────────────────────────────────────────────────
+
+// payment_verification → approve → product_verification
+// product_verification: assign delivery (courier/self), then mark shipped
 async function approveOrder(id: string) {
   'use server'
   const db = createAdminClient()
-  await db.from('orders').update({ status: 'confirmed' }).eq('id', id)
+
+  const { data: order } = await db
+    .from('orders')
+    .select('status')
+    .eq('id', id)
+    .single()
+
+  if (!order) return
+
+  // Only payment_verification can be approved here → moves to product_verification
+  if (order.status === 'payment_verification') {
+    await db.from('orders').update({ status: 'product_verification' }).eq('id', id)
+  }
+  // product_verification stage is handled via assignDelivery + markShipped
 }
 
 async function rejectOrder(id: string) {
@@ -124,7 +140,7 @@ export default async function OrdersPage({
 
   // Count badges for header
   const pendingCount = allOrders.filter(
-    (o) => o.status === 'pending_verification',
+    (o) => o.status === 'payment_verification' || o.status === 'product_verification',
   ).length
 
   return (

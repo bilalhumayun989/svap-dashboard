@@ -34,8 +34,8 @@ interface OrdersClientProps {
 
 const STATUS_OPTIONS = [
   { value: 'all', label: 'All Orders' },
-  { value: 'pending_verification', label: 'Pending Verification' },
-  { value: 'confirmed', label: 'Confirmed' },
+  { value: 'payment_verification', label: 'Payment Verification' },
+  { value: 'product_verification', label: 'Product Verification' },
   { value: 'shipped', label: 'Shipped' },
   { value: 'delivered', label: 'Delivered' },
   { value: 'cancelled', label: 'Cancelled' },
@@ -272,14 +272,15 @@ export default function OrdersClient({
 
                         <td className="py-4 px-4 align-middle text-right">
                           <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                            {order.status === 'pending_verification' && (
+                            {/* Step 1: Payment Verification → Approve or Reject */}
+                            {order.status === 'payment_verification' && (
                               <>
                                 <button
                                   disabled={isPending}
                                   onClick={() => run(() => onApprove(order.id))}
                                   className="px-2.5 py-1 text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-md hover:bg-emerald-500 hover:text-black transition-all"
                                 >
-                                  Approve
+                                  Approve Payment
                                 </button>
                                 <button
                                   disabled={isPending}
@@ -293,26 +294,28 @@ export default function OrdersClient({
                               </>
                             )}
 
-                            {order.status === 'confirmed' && !order.delivery_type && (
+                            {/* Step 2: Product Verification, no delivery yet → assign Courier or Self */}
+                            {order.status === 'product_verification' && !order.delivery_type && (
                               <>
                                 <button
                                   disabled={isPending}
                                   onClick={() => run(() => onAssignDelivery(order.id, 'courier'))}
                                   className="px-2.5 py-1 text-xs font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/30 rounded-md hover:bg-blue-500 hover:text-white transition-all"
                                 >
-                                  Courier
+                                  🚚 Courier
                                 </button>
                                 <button
                                   disabled={isPending}
                                   onClick={() => run(() => onAssignDelivery(order.id, 'self'))}
                                   className="px-2.5 py-1 text-xs font-semibold bg-orange-500/10 text-orange-400 border border-orange-500/30 rounded-md hover:bg-orange-500 hover:text-black transition-all"
                                 >
-                                  Self
+                                  🏍️ Self
                                 </button>
                               </>
                             )}
 
-                            {order.status === 'confirmed' && order.delivery_type && (
+                            {/* Step 3: Delivery assigned → Mark Shipped */}
+                            {order.status === 'product_verification' && order.delivery_type && (
                               <button
                                 disabled={isPending}
                                 onClick={() => {
@@ -321,17 +324,18 @@ export default function OrdersClient({
                                 }}
                                 className="px-2.5 py-1 text-xs font-semibold bg-purple-500/10 text-purple-400 border border-purple-500/30 rounded-md hover:bg-purple-500 hover:text-white transition-all"
                               >
-                                Ship
+                                📦 Mark Shipped
                               </button>
                             )}
 
+                            {/* Step 4: Shipped → Mark Delivered */}
                             {order.status === 'shipped' && (
                               <button
                                 disabled={isPending}
                                 onClick={() => run(() => onMarkDelivered(order.id))}
                                 className="px-2.5 py-1 text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-md hover:bg-emerald-500 hover:text-black transition-all"
                               >
-                                Deliver
+                                ✓ Delivered
                               </button>
                             )}
 
@@ -447,7 +451,8 @@ export default function OrdersClient({
 
                     {/* Actions Panel */}
                     <div className="pt-2 border-t border-zinc-800/60 space-y-2">
-                      {order.status === 'pending_verification' && (
+                      {/* Step 1: Approve or Reject payment */}
+                      {order.status === 'payment_verification' && (
                         <div className="grid grid-cols-2 gap-2">
                           <button
                             disabled={isPending}
@@ -455,7 +460,7 @@ export default function OrdersClient({
                             className="w-full py-2 text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-lg hover:bg-emerald-500 hover:text-black transition-all flex items-center justify-center gap-1"
                           >
                             <CheckCircle2 className="w-3.5 h-3.5" />
-                            Approve
+                            Approve Payment
                           </button>
                           <button
                             disabled={isPending}
@@ -470,7 +475,8 @@ export default function OrdersClient({
                         </div>
                       )}
 
-                      {order.status === 'confirmed' && !order.delivery_type && (
+                      {/* Step 2: Assign delivery method */}
+                      {order.status === 'product_verification' && !order.delivery_type && (
                         <div className="grid grid-cols-2 gap-2">
                           <button
                             disabled={isPending}
@@ -491,7 +497,8 @@ export default function OrdersClient({
                         </div>
                       )}
 
-                      {order.status === 'confirmed' && order.delivery_type && (
+                      {/* Step 3: Mark Shipped */}
+                      {order.status === 'product_verification' && order.delivery_type && (
                         <button
                           disabled={isPending}
                           onClick={() => {
@@ -505,6 +512,7 @@ export default function OrdersClient({
                         </button>
                       )}
 
+                      {/* Step 4: Mark Delivered */}
                       {order.status === 'shipped' && (
                         <button
                           disabled={isPending}

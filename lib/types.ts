@@ -1,4 +1,4 @@
-export type OrderStatus = 'pending_verification' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled'
+export type OrderStatus = 'payment_verification' | 'product_verification' | 'shipped' | 'delivered' | 'cancelled'
 
 export interface Order {
   id: string

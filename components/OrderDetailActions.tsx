@@ -22,7 +22,7 @@ export default function OrderDetailActions({ order, onUpdateStatus, onAssignDeli
     })
   }
 
-  const noActions = !['pending_verification', 'confirmed', 'shipped'].includes(order.status)
+  const noActions = ['cancelled', 'delivered'].includes(order.status)
 
   return (
     <section className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-3">
@@ -31,11 +31,12 @@ export default function OrderDetailActions({ order, onUpdateStatus, onAssignDeli
         {isPending && <span className="ml-2 text-xs text-zinc-500 font-normal animate-pulse">Saving…</span>}
       </h2>
 
-      {order.status === 'pending_verification' && (
+      {/* Step 1: Payment Verification → approve moves to product_verification */}
+      {order.status === 'payment_verification' && (
         <>
           <button
             disabled={isPending}
-            onClick={() => run(() => onUpdateStatus(order.id, 'confirmed'))}
+            onClick={() => run(() => onUpdateStatus(order.id, 'product_verification'))}
             className="w-full py-2.5 rounded-lg bg-green-500/15 text-green-400 border border-green-500/30 text-sm font-semibold hover:bg-green-500/25 transition-colors disabled:opacity-50"
           >
             ✓ Approve Payment
@@ -53,9 +54,10 @@ export default function OrderDetailActions({ order, onUpdateStatus, onAssignDeli
         </>
       )}
 
-      {order.status === 'confirmed' && !order.delivery_type && (
+      {/* Step 2: Product Verification → assign delivery then ship */}
+      {order.status === 'product_verification' && !order.delivery_type && (
         <div className="space-y-2">
-          <p className="text-xs text-zinc-500 text-center">Assign delivery method first</p>
+          <p className="text-xs text-zinc-500 text-center">Assign delivery method to proceed</p>
           <button
             disabled={isPending}
             onClick={() => run(() => onAssignDelivery(order.id, 'courier'))}
@@ -70,10 +72,20 @@ export default function OrderDetailActions({ order, onUpdateStatus, onAssignDeli
           >
             🏍️ Self Deliver
           </button>
+          <button
+            disabled={isPending}
+            onClick={() => {
+              if (confirm('Reject this order? Status will be set to cancelled.'))
+                run(() => onUpdateStatus(order.id, 'cancelled'))
+            }}
+            className="w-full py-2.5 rounded-lg bg-red-500/15 text-red-400 border border-red-500/30 text-sm font-semibold hover:bg-red-500/25 transition-colors disabled:opacity-50"
+          >
+            ✕ Reject Order
+          </button>
         </div>
       )}
 
-      {order.status === 'confirmed' && order.delivery_type && (
+      {order.status === 'product_verification' && order.delivery_type && (
         <div className="space-y-2">
           <div
             className={`rounded-lg px-4 py-2 text-center text-sm font-semibold ${
@@ -108,6 +120,7 @@ export default function OrderDetailActions({ order, onUpdateStatus, onAssignDeli
         </div>
       )}
 
+      {/* Step 3: Shipped → delivered */}
       {order.status === 'shipped' && (
         <button
           disabled={isPending}
