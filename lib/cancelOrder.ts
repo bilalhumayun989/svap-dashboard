@@ -22,7 +22,7 @@ export async function cancelOrderAndRestoreItems(orderId: string) {
   }
 
   // Only cancellable while still in-progress (not already done/cancelled)
-  if (!['payment_verification', 'product_verification', 'shipped'].includes(sourceOrder.status ?? '')) {
+  if (!['payment_verification', 'product_verification', 'item_verification', 'shipped'].includes(sourceOrder.status ?? '')) {
     throw new Error('This order can no longer be cancelled')
   }
 

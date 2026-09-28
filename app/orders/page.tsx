@@ -32,7 +32,7 @@ async function getSessionUser() {
 
 // ─── Notification Helper ──────────────────────────────────────────────────────
 // The DB trigger (on_order_status_change) fires on ANY status update and sends
-// the SAME notification to BOTH swap partners — which is wrong when only one
+// the SAME notification to BOTH svap partners — which is wrong when only one
 // order changed. This helper:
 //   1. Deletes the trigger-generated notifications for this order (fired within
 //      the last 10 seconds, so we catch only the ones just created).
@@ -81,6 +81,7 @@ async function fixNotifications(
 }
 
 // ─── Server Actions ───────────────────────────────────────────────────────────
+// Flow: payment_verification → product_verification → item_verification → shipped → delivered
 
 // Step 1: payment_verification → product_verification
 async function approveOrder(id: string) {
@@ -95,30 +96,50 @@ async function approveOrder(id: string) {
 
   if (!order || order.status !== 'payment_verification') return
 
-  // Update only THIS order
   await db.from('orders').update({ status: 'product_verification' }).eq('id', id)
 
-  // Find partner's user_id (if they have a linked order)
   let partnerUserId: string | null = null
   if (order.swap_request_id) {
-    const { data: partnerOrder } = await db
-      .from('orders')
-      .select('from_user_id')
-      .eq('swap_request_id', order.swap_request_id)
-      .neq('id', id)
-      .maybeSingle()
-    partnerUserId = partnerOrder?.from_user_id ?? null
+    const { data: p } = await db.from('orders').select('from_user_id')
+      .eq('swap_request_id', order.swap_request_id).neq('id', id).maybeSingle()
+    partnerUserId = p?.from_user_id ?? null
   }
 
-  await fixNotifications(
-    db,
-    id,
-    order.from_user_id,
-    partnerUserId,
+  await fixNotifications(db, id, order.from_user_id, partnerUserId,
     'Payment Verified ✅',
     'Your payment has been verified! We are now checking your item before dispatch.',
     partnerUserId ? 'Svap Partner Update 🔄' : null,
     partnerUserId ? 'Your svap partner has confirmed their payment. Your own order will be processed independently.' : null,
+  )
+}
+
+// Step 2: product_verification → item_verification
+async function approveProductVerification(id: string) {
+  'use server'
+  const db = createAdminClient()
+
+  const { data: order } = await db
+    .from('orders')
+    .select('id, status, from_user_id, swap_request_id')
+    .eq('id', id)
+    .single()
+
+  if (!order || order.status !== 'product_verification') return
+
+  await db.from('orders').update({ status: 'item_verification' }).eq('id', id)
+
+  let partnerUserId: string | null = null
+  if (order.swap_request_id) {
+    const { data: p } = await db.from('orders').select('from_user_id')
+      .eq('swap_request_id', order.swap_request_id).neq('id', id).maybeSingle()
+    partnerUserId = p?.from_user_id ?? null
+  }
+
+  await fixNotifications(db, id, order.from_user_id, partnerUserId,
+    'Product Verified ✅',
+    'Your product has been verified! We are now performing a final item check before shipping.',
+    partnerUserId ? 'Svap Partner Update 🔄' : null,
+    partnerUserId ? 'Your svap partner\'s product has been verified. Their order is progressing independently.' : null,
   )
 }
 
@@ -208,9 +229,9 @@ async function markShipped(id: string, trackingNumber: string | null) {
     id,
     order.from_user_id,
     partnerUserId,
-    'Order Shipped 📦',
+    'Order Shipped',
     `Your order has been shipped! ${deliveryNote}${trackingNote}`,
-    partnerUserId ? 'Svap Partner Update 📦' : null,
+    partnerUserId ? 'Svap Partner Update ' : null,
     partnerUserId ? 'Your svap partner\'s item has been shipped. Your own order is being processed separately.' : null,
   )
 }
@@ -302,7 +323,7 @@ export default async function OrdersPage({
 
   // Count badges for header
   const pendingCount = allOrders.filter(
-    (o) => o.status === 'payment_verification' || o.status === 'product_verification',
+    (o) => o.status === 'payment_verification' || o.status === 'product_verification' || o.status === 'item_verification',
   ).length
 
   return (
@@ -343,6 +364,7 @@ export default async function OrdersPage({
         orders={allOrders}
         initialStatus={statusFilter}
         onApprove={approveOrder}
+        onApproveProduct={approveProductVerification}
         onReject={rejectOrder}
         onCancel={cancelOrder}
         onAssignDelivery={assignDelivery}

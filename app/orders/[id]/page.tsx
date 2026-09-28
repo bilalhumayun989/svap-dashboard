@@ -114,16 +114,23 @@ async function updateOrderStatus(id: string, status: OrderStatus, trackingNumber
     await fixNotifications(db, id, order.from_user_id, partnerUserId,
       'Payment Verified ✅',
       'Your payment has been verified! We are now checking your item before dispatch.',
-      partnerUserId ? 'Svap Partner Update 🔄' : null,
-      partnerUserId ? 'Your svap partner has confirmed their payment. Your own order will be processed independently.' : null,
+      partnerUserId ? 'Swap Partner Update 🔄' : null,
+      partnerUserId ? 'Your swap partner has confirmed their payment. Your own order will be processed independently.' : null,
+    )
+  } else if (status === 'item_verification') {
+    await fixNotifications(db, id, order.from_user_id, partnerUserId,
+      'Product Verified ✅',
+      'Your product has been verified! We are now performing a final item check before shipping.',
+      partnerUserId ? 'Swap Partner Update 🔄' : null,
+      partnerUserId ? 'Your swap partner\'s product has been verified. Their order is progressing independently.' : null,
     )
   } else if (status === 'shipped') {
     const trackingNote = trackingNumber ? ` Tracking number: ${trackingNumber}` : ''
     const deliveryNote = order.delivery_type === 'self' ? 'Our rider is on the way to you.' : 'Your item is being sent via courier.'
     await fixNotifications(db, id, order.from_user_id, partnerUserId,
-      'Order Shipped 📦',
+      'Order Shipped ',
       `Your order has been shipped! ${deliveryNote}${trackingNote}`,
-      partnerUserId ? 'Svap Partner Update 📦' : null,
+      partnerUserId ? 'Svap Partner Update' : null,
       partnerUserId ? 'Your svap partner\'s item has been shipped. Your own order is being processed separately.' : null,
     )
   } else if (status === 'delivered') {
@@ -141,9 +148,9 @@ async function updateOrderStatus(id: string, status: OrderStatus, trackingNumber
 
     await fixNotifications(db, id, order.from_user_id, partnerUserId,
       'Order Delivered 🎉',
-      'Your item has been delivered! Enjoy your svap.',
-      partnerUserId && !allDelivered ? 'Svap Partner Update ✅' : null,
-      partnerUserId && !allDelivered ? 'Your svap partner\'s item has been delivered. You will receive a separate notification when your item is delivered.' : null,
+      'Your item has been delivered! Enjoy your swap.',
+      partnerUserId && !allDelivered ? 'Swap Partner Update ✅' : null,
+      partnerUserId && !allDelivered ? 'Your swap partner\'s item has been delivered. You will receive a separate notification when your item is delivered.' : null,
     )
   } else if (status === 'cancelled') {
     await fixNotifications(db, id, order.from_user_id, partnerUserId,
@@ -159,6 +166,12 @@ async function assignDeliveryType(id: string, type: 'courier' | 'self') {
   'use server'
   const db = createAdminClient()
   await db.from('orders').update({ delivery_type: type }).eq('id', id)
+}
+
+async function saveAdminNote(id: string, note: string) {
+  'use server'
+  const db = createAdminClient()
+  await db.from('orders').update({ admin_notes: note || null }).eq('id', id)
 }
 
 async function cancelOrder(id: string) {
@@ -611,6 +624,7 @@ export default async function OrderDetailPage({
                 order={order}
                 onUpdateStatus={updateOrderStatus}
                 onAssignDelivery={assignDeliveryType}
+                onSaveAdminNote={saveAdminNote}
                 onCancel={cancelOrder}
               />
             </div>
