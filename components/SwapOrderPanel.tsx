@@ -18,8 +18,34 @@ import {
   Receipt,
   ExternalLink,
   Clock,
-  ArrowRightLeft
+  ArrowRightLeft,
+  Copy,
 } from 'lucide-react'
+
+// ─── Copy Button ──────────────────────────────────────────────────────────────
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+  function handleCopy() {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+  return (
+    <button
+      onClick={handleCopy}
+      title="Copy delivery details"
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium border transition-all
+        bg-zinc-800/60 text-zinc-400 border-zinc-700/60 hover:bg-zinc-700 hover:text-zinc-200"
+    >
+      {copied ? (
+        <><Check className="w-3 h-3 text-emerald-400" /><span className="text-emerald-400">Copied!</span></>
+      ) : (
+        <><Copy className="w-3 h-3" />Copy</>
+      )}
+    </button>
+  )
+}
 
 interface Props {
   party: 'Party 1 (Sender)' | 'Party 2 (Receiver)'
@@ -29,10 +55,13 @@ interface Props {
   onApprovePayment: (id: string) => Promise<void>
   onRejectPayment: (id: string) => Promise<void>
   onVerifyItem: (id: string) => Promise<void>
+  onItemVerificationFailed: (id: string) => Promise<void>
   onAssignDelivery: (id: string, type: 'courier' | 'self') => Promise<void>
   onMarkShipped: (id: string, trackingNumber: string | null) => Promise<void>
   onMarkDelivered: (id: string) => Promise<void>
   onSaveAdminNote: (id: string, note: string) => Promise<void>
+  onUndoPaymentApproval: (id: string) => Promise<void>
+  onUndoItemVerification: (id: string) => Promise<void>
 }
 
 function isImageURL(url?: string | null) {
@@ -64,10 +93,13 @@ export default function SwapOrderPanel({
   onApprovePayment,
   onRejectPayment,
   onVerifyItem,
+  onItemVerificationFailed,
   onAssignDelivery,
   onMarkShipped,
   onMarkDelivered,
   onSaveAdminNote,
+  onUndoPaymentApproval,
+  onUndoItemVerification,
 }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -138,10 +170,20 @@ export default function SwapOrderPanel({
         <>
           {/* Delivery info */}
           <div className="bg-zinc-950/50 rounded-xl p-3.5 border border-zinc-800/60 space-y-2">
-            <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1">
-              <MapPin className="w-3 h-3 text-zinc-400" />
-              Delivery Destination
-            </p>
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-1">
+                <MapPin className="w-3 h-3 text-zinc-400" />
+                Delivery Destination
+              </p>
+              <CopyButton
+                text={[
+                  order.delivery_name,
+                  order.delivery_phone,
+                  order.delivery_city,
+                  order.delivery_address,
+                ].filter(Boolean).join('\n')}
+              />
+            </div>
             <div className="space-y-0.5 text-xs">
               <p className="text-zinc-200 font-semibold">{order.delivery_name}</p>
               <p className="text-zinc-400">{order.delivery_phone}</p>
@@ -249,15 +291,38 @@ export default function SwapOrderPanel({
               </div>
             )}
 
-            {/* Step 2: product_verification */}
+            {/* Step 2: product_verification — 2 outcome buttons */}
             {order.status === 'product_verification' && (
-              <button
-                disabled={isPending}
-                onClick={() => run(() => onVerifyItem(order.id))}
-                className="w-full inline-flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 text-xs font-semibold hover:bg-cyan-500/25 transition-all disabled:opacity-50"
-              >
-                <Search className="w-4 h-4" /> Verify Item
-              </button>
+              <div className="space-y-2">
+                <p className="text-[11px] text-zinc-400 text-center font-medium">Item Verification Result</p>
+                <button
+                  disabled={isPending}
+                  onClick={() => run(() => onVerifyItem(order.id))}
+                  className="w-full inline-flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 text-xs font-semibold hover:bg-cyan-500/25 transition-all disabled:opacity-50"
+                >
+                  <Check className="w-4 h-4" /> Verification Successful
+                </button>
+                <button
+                  disabled={isPending}
+                  onClick={() => {
+                    if (confirm('Mark item verification as unsuccessful? Order will be cancelled.'))
+                      run(() => onItemVerificationFailed(order.id))
+                  }}
+                  className="w-full inline-flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-rose-500/15 text-rose-400 border border-rose-500/30 text-xs font-semibold hover:bg-rose-500/25 transition-all disabled:opacity-50"
+                >
+                  <X className="w-4 h-4" /> Verification Unsuccessful
+                </button>
+                <button
+                  disabled={isPending}
+                  onClick={() => {
+                    if (confirm('Undo payment approval? Status will go back to Payment Verification.'))
+                      run(() => onUndoPaymentApproval(order.id))
+                  }}
+                  className="w-full inline-flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-zinc-800/60 text-zinc-400 border border-zinc-700/60 text-[11px] font-medium hover:text-zinc-200 hover:bg-zinc-800 transition-all disabled:opacity-50"
+                >
+                  ↩ Undo Payment Approval
+                </button>
+              </div>
             )}
 
             {/* Step 3: item_verification -> assign delivery */}
@@ -282,6 +347,16 @@ export default function SwapOrderPanel({
                     <Bike className="w-4 h-4" /> Self
                   </button>
                 </div>
+                <button
+                  disabled={isPending}
+                  onClick={() => {
+                    if (confirm('Undo item verification? Status will go back to Product Verification.'))
+                      run(() => onUndoItemVerification(order.id))
+                  }}
+                  className="w-full inline-flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-zinc-800/60 text-zinc-400 border border-zinc-700/60 text-[11px] font-medium hover:text-zinc-200 hover:bg-zinc-800 transition-all disabled:opacity-50"
+                >
+                  ↩ Undo Item Verification
+                </button>
               </div>
             )}
 
@@ -330,6 +405,16 @@ export default function SwapOrderPanel({
                   <ArrowRightLeft className="w-3 h-3" />
                   Switch to{' '}
                   {order.delivery_type === 'courier' ? 'Self Delivery' : 'Courier'}
+                </button>
+                <button
+                  disabled={isPending}
+                  onClick={() => {
+                    if (confirm('Undo item verification? Status will go back to Product Verification.'))
+                      run(() => onUndoItemVerification(order.id))
+                  }}
+                  className="w-full inline-flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-zinc-800/60 text-zinc-400 border border-zinc-700/60 text-[11px] font-medium hover:text-zinc-200 hover:bg-zinc-800 transition-all disabled:opacity-50"
+                >
+                  ↩ Undo Item Verification
                 </button>
               </div>
             )}

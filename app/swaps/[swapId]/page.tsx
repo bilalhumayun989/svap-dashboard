@@ -74,8 +74,8 @@ async function makeApprovePayment(swapId: string) {
     await fixNotifications(db, orderId, order.from_user_id, partnerUserId,
       'Payment Verified ✅',
       'Your payment has been verified! We are now checking your item before dispatch.',
-      partnerUserId ? 'Swap Partner Update 🔄' : null,
-      partnerUserId ? 'Your swap partner has confirmed their payment. Your own order will be processed independently.' : null,
+      partnerUserId ? 'Svap Partner Update 🔄' : null,
+      partnerUserId ? 'Your svap partner has confirmed their payment. Your own order will be processed independently.' : null,
     )
     revalidateAll(swapId)
   }
@@ -94,8 +94,8 @@ async function makeRejectPayment(swapId: string) {
     await fixNotifications(db, orderId, order.from_user_id, partnerUserId,
       'Payment Rejected ❌',
       'Your payment could not be verified. Please contact support for assistance.',
-      partnerUserId ? 'Swap Update ⚠️' : null,
-      partnerUserId ? "Your swap partner's payment was rejected. This swap will not proceed further." : null,
+      partnerUserId ? 'Svap Update ⚠️' : null,
+      partnerUserId ? "Your svap partner's payment was rejected. This svap will not proceed further." : null,
     )
     revalidateAll(swapId)
   }
@@ -114,12 +114,32 @@ async function makeVerifyItem(swapId: string) {
     await fixNotifications(db, orderId, order.from_user_id, partnerUserId,
       'Product Verified ✅',
       'Your product has been verified! We are now performing a final item check before shipping.',
-      partnerUserId ? 'Swap Partner Update 🔄' : null,
-      partnerUserId ? "Your swap partner's product has been verified. Their order is progressing independently." : null,
+      partnerUserId ? 'Svap Partner Update 🔄' : null,
+      partnerUserId ? "Your svap partner's product has been verified. Their order is progressing independently." : null,
     )
     revalidateAll(swapId)
   }
   return verifyItem
+}
+
+async function makeItemVerificationFailed(swapId: string) {
+  async function itemVerificationFailed(orderId: string) {
+    'use server'
+    const db = createAdminClient()
+    const { data: order } = await db
+      .from('orders').select('status, from_user_id, swap_request_id').eq('id', orderId).single()
+    if (!order || order.status !== 'product_verification') return
+    await db.from('orders').update({ status: 'cancelled' }).eq('id', orderId)
+    const partnerUserId = await findPartnerUserId(db, orderId, order.swap_request_id)
+    await fixNotifications(db, orderId, order.from_user_id, partnerUserId,
+      'Item Verification Failed ❌',
+      'Unfortunately, your item did not pass verification. Your order has been cancelled. Please contact support for assistance.',
+      partnerUserId ? 'Svap Update ⚠️' : null,
+      partnerUserId ? "Your svap partner's item did not pass verification. This svap cannot proceed." : null,
+    )
+    revalidateAll(swapId)
+  }
+  return itemVerificationFailed
 }
 
 async function makeAssignDelivery(swapId: string) {
@@ -147,10 +167,10 @@ async function makeMarkShipped(swapId: string) {
     const trackingNote = trackingNumber ? ` Tracking: ${trackingNumber}` : ''
     const deliveryNote = order.delivery_type === 'self' ? 'Our rider is on the way to you.' : 'Your item is being sent via courier.'
     await fixNotifications(db, orderId, order.from_user_id, partnerUserId,
-      'Order Shipped 📦',
+      'Order Shipped ',
       `Your order has been shipped! ${deliveryNote}${trackingNote}`,
-      partnerUserId ? 'Swap Partner Update 📦' : null,
-      partnerUserId ? "Your swap partner's item has been shipped. Your own order is being processed separately." : null,
+      partnerUserId ? 'Svap Partner Update ' : null,
+      partnerUserId ? "Your svap partner's item has been shipped. Your own order is being processed separately." : null,
     )
     revalidateAll(swapId)
   }
@@ -179,9 +199,9 @@ async function makeMarkDelivered(swapId: string) {
 
     await fixNotifications(db, orderId, order.from_user_id, partnerUserId,
       'Order Delivered 🎉',
-      'Your item has been delivered! Enjoy your swap.',
-      partnerUserId && !allDelivered ? 'Swap Partner Update ✅' : null,
-      partnerUserId && !allDelivered ? "Your swap partner's item has been delivered. You will receive a separate notification when your item is delivered." : null,
+      'Your item has been delivered! Enjoy your SVAP.',
+      partnerUserId && !allDelivered ? 'SVAP Partner Update ✅' : null,
+      partnerUserId && !allDelivered ? "Your SVAP partner's item has been delivered. You will receive a separate notification when your item is delivered." : null,
     )
     revalidateAll(swapId)
   }
@@ -205,6 +225,50 @@ async function makeCancelSwap(swapId: string) {
     revalidateAll(swapId)
   }
   return cancelSwap
+}
+
+// ─── Undo actions ─────────────────────────────────────────────────────────────
+
+// Undo payment approval: product_verification → payment_verification
+async function makeUndoPaymentApproval(swapId: string) {
+  async function undoPaymentApproval(orderId: string) {
+    'use server'
+    const db = createAdminClient()
+    const { data: order } = await db
+      .from('orders').select('status, from_user_id, swap_request_id').eq('id', orderId).single()
+    if (!order || order.status !== 'product_verification') return
+    await db.from('orders').update({ status: 'payment_verification' }).eq('id', orderId)
+    const partnerUserId = await findPartnerUserId(db, orderId, order.swap_request_id)
+    await fixNotifications(db, orderId, order.from_user_id, partnerUserId,
+      'Payment Verification Pending 🔄',
+      'Your payment approval has been reversed. Admin will re-review your payment.',
+      partnerUserId ? 'Svap Partner Update 🔄' : null,
+      partnerUserId ? "Your svap partner's payment approval was reversed by admin." : null,
+    )
+    revalidateAll(swapId)
+  }
+  return undoPaymentApproval
+}
+
+// Undo item verification: item_verification → product_verification
+async function makeUndoItemVerification(swapId: string) {
+  async function undoItemVerification(orderId: string) {
+    'use server'
+    const db = createAdminClient()
+    const { data: order } = await db
+      .from('orders').select('status, from_user_id, swap_request_id').eq('id', orderId).single()
+    if (!order || order.status !== 'item_verification') return
+    await db.from('orders').update({ status: 'product_verification' }).eq('id', orderId)
+    const partnerUserId = await findPartnerUserId(db, orderId, order.swap_request_id)
+    await fixNotifications(db, orderId, order.from_user_id, partnerUserId,
+      'Item Re-Verification Required 🔄',
+      'Your item verification has been reversed. Admin will re-inspect your item.',
+      partnerUserId ? 'Svap Partner Update 🔄' : null,
+      partnerUserId ? "Your svap partner's item verification was reversed by admin." : null,
+    )
+    revalidateAll(swapId)
+  }
+  return undoItemVerification
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -268,20 +332,26 @@ export default async function SwapDetailPage({
     approvePayment,
     rejectPayment,
     verifyItem,
+    itemVerificationFailed,
     assignDelivery,
     markShipped,
     markDelivered,
     saveAdminNote,
     cancelSwap,
+    undoPaymentApproval,
+    undoItemVerification,
   ] = await Promise.all([
     makeApprovePayment(swapId),
     makeRejectPayment(swapId),
     makeVerifyItem(swapId),
+    makeItemVerificationFailed(swapId),
     makeAssignDelivery(swapId),
     makeMarkShipped(swapId),
     makeMarkDelivered(swapId),
     makeSaveAdminNote(swapId),
     makeCancelSwap(swapId),
+    makeUndoPaymentApproval(swapId),
+    makeUndoItemVerification(swapId),
   ])
 
   // Determine if cancel is possible (either order still active)
@@ -303,7 +373,7 @@ export default async function SwapDetailPage({
           </Link>
           <span className="text-zinc-700">/</span>
           <span className="text-zinc-400 font-mono text-xs bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded">
-            Swap #{swapNum}
+            Svap #{swapNum}
           </span>
         </div>
 
@@ -311,7 +381,7 @@ export default async function SwapDetailPage({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 bg-zinc-950 border border-zinc-800/80 p-5 rounded-2xl">
           <div>
             <h1 className="text-2xl sm:text-3xl font-black text-zinc-100 tracking-tight">
-              Swap #{swapNum}
+              Svap #{swapNum}
             </h1>
             <p className="text-zinc-400 text-xs sm:text-sm mt-1">
               {new Date(swap.created_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
@@ -323,7 +393,7 @@ export default async function SwapDetailPage({
               swap.status === 'cancelled' ? 'bg-red-500/15 text-red-400 border-red-500/30' :
               'bg-zinc-800 text-zinc-400 border-zinc-700'
             }`}>
-              Swap: {swap.status}
+              Svap: {swap.status}
             </span>
           </div>
         </div>
@@ -332,7 +402,7 @@ export default async function SwapDetailPage({
         <section className="bg-zinc-950 border border-zinc-800/80 rounded-2xl p-5 sm:p-6 mb-6">
           <div className="flex items-center gap-2 mb-4">
             <ArrowLeftRight className="w-4 h-4 text-orange-400" />
-            <h2 className="font-bold text-zinc-100">Swap Items</h2>
+            <h2 className="font-bold text-zinc-100">Svap Items</h2>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-11 items-center gap-4 bg-zinc-900/60 border border-zinc-800/50 p-4 rounded-xl">
             {/* Offered / Cash */}
@@ -391,10 +461,13 @@ export default async function SwapDetailPage({
             onApprovePayment={approvePayment}
             onRejectPayment={rejectPayment}
             onVerifyItem={verifyItem}
+            onItemVerificationFailed={itemVerificationFailed}
             onAssignDelivery={assignDelivery}
             onMarkShipped={markShipped}
             onMarkDelivered={markDelivered}
             onSaveAdminNote={saveAdminNote}
+            onUndoPaymentApproval={undoPaymentApproval}
+            onUndoItemVerification={undoItemVerification}
           />
           <SwapOrderPanel
             party="Party 2 (Receiver)"
@@ -403,10 +476,13 @@ export default async function SwapDetailPage({
             onApprovePayment={approvePayment}
             onRejectPayment={rejectPayment}
             onVerifyItem={verifyItem}
+            onItemVerificationFailed={itemVerificationFailed}
             onAssignDelivery={assignDelivery}
             onMarkShipped={markShipped}
             onMarkDelivered={markDelivered}
             onSaveAdminNote={saveAdminNote}
+            onUndoPaymentApproval={undoPaymentApproval}
+            onUndoItemVerification={undoItemVerification}
           />
         </div>
 
@@ -415,7 +491,7 @@ export default async function SwapDetailPage({
           <section className="bg-zinc-950 border border-zinc-800/80 rounded-2xl p-5">
             <div className="flex items-center gap-2 mb-3">
               <ShieldCheck className="w-4 h-4 text-orange-400" />
-              <h2 className="font-bold text-zinc-100 text-sm">Swap Controls</h2>
+              <h2 className="font-bold text-zinc-100 text-sm">Svap Controls</h2>
             </div>
             <form action={async () => {
               'use server'
@@ -425,7 +501,7 @@ export default async function SwapDetailPage({
                 type="submit"
                 className="w-full py-2.5 rounded-lg bg-red-500/15 text-red-400 border border-red-500/30 text-sm font-semibold hover:bg-red-500/25 transition-colors"
               >
-                Cancel Entire Swap &amp; Restore Items
+                Cancel Entire Svap &amp; Restore Items
               </button>
             </form>
           </section>

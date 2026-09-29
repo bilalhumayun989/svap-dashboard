@@ -72,7 +72,7 @@ export default async function Dashboard() {
 
     // Swapped products
     db.from('products').select('id', { count: 'exact', head: true })
-      .eq('status', 'swapped'),
+      .eq('status', 'svapped'),
 
     // Recent 6 orders with profile join
     db.from('orders')
@@ -129,7 +129,7 @@ export default async function Dashboard() {
             Dashboard
           </h1>
           <p className="text-zinc-500 text-xs sm:text-sm mt-0.5">
-            Overview of SVAP swap marketplace activity &amp; statistics
+            Overview of SVAP svap marketplace activity &amp; statistics
           </p>
         </div>
 
@@ -174,7 +174,7 @@ export default async function Dashboard() {
               <Tag className="w-4 h-4 shrink-0" />
             </div>
             <p className="text-2xl sm:text-3xl font-black text-white">{stats.activeProducts}</p>
-            <p className="text-[11px] sm:text-xs text-zinc-500 mt-1.5">{stats.swappedProducts} already swapped</p>
+            <p className="text-[11px] sm:text-xs text-zinc-500 mt-1.5">{stats.swappedProducts} already svapped</p>
           </div>
         </div>
 

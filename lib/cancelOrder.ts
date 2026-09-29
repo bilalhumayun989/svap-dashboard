@@ -118,12 +118,12 @@ export async function cancelOrderAndRestoreItems(orderId: string) {
       title = 'Order Cancelled ❌'
       body = hasPaid
         ? 'Your order has been cancelled. Your payment will be refunded. Please contact support.'
-        : 'Your order has been cancelled. This svap will not proceed further.'
+        : 'Your order has been cancelled. This SVAP will not proceed further.'
     } else {
-      title = 'Svap Cancelled ⚠️'
+      title = 'SVAP Cancelled ⚠️'
       body = hasPaid
-        ? 'Your svap partner\'s order was cancelled, so your order has also been cancelled. Your payment will be refunded. Please contact support.'
-        : 'Your svap partner\'s order was cancelled, so this svap cannot be completed. Your items have been restored to active.'
+        ? 'Your SVAP partner\'s order was cancelled, so your order has also been cancelled. Your payment will be refunded. Please contact support.'
+        : 'Your SVAP partner\'s order was cancelled, so this SVAP cannot be completed. Your items have been restored to active.'
     }
 
     return {

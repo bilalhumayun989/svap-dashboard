@@ -81,7 +81,7 @@ export default function SwapsClient({ swaps }: Props) {
           <div className="flex-1 min-w-0">
             <h4 className="font-semibold text-sm sm:text-base text-amber-300">Action Required</h4>
             <p className="text-xs sm:text-sm text-amber-400/80">
-              {unassigned.length} swap{unassigned.length > 1 ? 's' : ''} awaiting delivery partner assignment
+              {unassigned.length} svap{unassigned.length > 1 ? 's' : ''} awaiting delivery partner assignment
             </p>
           </div>
         </div>
@@ -94,7 +94,7 @@ export default function SwapsClient({ swaps }: Props) {
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search username, phone, tracking ref, swap ID..."
+            placeholder="Search username, phone, tracking ref, svap ID..."
             className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-orange-500/80 focus:ring-1 focus:ring-orange-500/50 transition-all"
           />
         </div>
@@ -118,7 +118,7 @@ export default function SwapsClient({ swaps }: Props) {
       {/* Cards List / Grid */}
       {filtered.length === 0 ? (
         <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-2xl py-16 px-4 text-center">
-          <p className="text-zinc-400 font-medium text-base">No swaps match your criteria.</p>
+          <p className="text-zinc-400 font-medium text-base">No svaps match your criteria.</p>
           <p className="text-zinc-600 text-xs sm:text-sm mt-1">Try resetting search parameters or filters.</p>
         </div>
       ) : (
@@ -149,7 +149,7 @@ export default function SwapsClient({ swaps }: Props) {
                   </div>
 
                   <div className="flex items-center gap-1 text-xs font-medium text-zinc-400 group-hover:text-orange-400 transition-colors">
-                    <span>View Swap</span>
+                    <span>View Svap</span>
                     <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
                   </div>
                 </div>

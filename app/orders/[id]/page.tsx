@@ -1,5 +1,5 @@
-// Old per-order detail route. Looks up the swap_request_id for this order
-// and redirects to /swaps/[swapId] so old links keep working.
+// Old per-order detail route. Looks up the svap_request_id for this order
+// and redirects to /svaps/[svapId] so old links keep working.
 
 import { redirect, notFound } from 'next/navigation'
 import { cookies } from 'next/headers'

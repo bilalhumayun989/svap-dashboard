@@ -105,7 +105,7 @@ export default async function SwapsPage() {
           <div>
             <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">Orders</h1>
             <p className="text-zinc-500 text-xs sm:text-sm mt-0.5 font-medium">
-              Manage swap pairs — <span className="text-zinc-300 font-semibold">{swaps.length}</span> swap{swaps.length !== 1 ? 's' : ''}
+              Manage svap pairs — <span className="text-zinc-300 font-semibold">{swaps.length}</span> svap{swaps.length !== 1 ? 's' : ''}
             </p>
           </div>
           {pendingCount > 0 && (
@@ -118,7 +118,7 @@ export default async function SwapsPage() {
 
         {error && (
           <div className="mb-4 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3 text-red-400 text-xs">
-            <strong>Error loading swaps:</strong> {error.message}
+            <strong>Error loading svaps:</strong> {error.message}
           </div>
         )}
 
