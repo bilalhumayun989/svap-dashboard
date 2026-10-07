@@ -87,7 +87,7 @@ export default async function SwapDetailPage({
   const requestedImg = requestedProduct?.image_urls?.[0]
   const isCashOnly = !offeredProduct
 
-  const swapNum = swapId.replaceAll('-', '').slice(0, 6).toUpperCase()
+  const swapNum = swapId.replaceAll('-', '').slice(0, 8).toUpperCase()
 
   // Build server actions (closure captures swapId for revalidatePath)
   const [

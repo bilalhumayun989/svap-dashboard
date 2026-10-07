@@ -32,7 +32,7 @@ const FILTERS = [
 ]
 
 function swapNumber(swapId: string): string {
-  return swapId.replaceAll('-', '').slice(0, 6).toUpperCase()
+  return swapId.replaceAll('-', '').slice(0, 8).toUpperCase()
 }
 
 export default function SwapsClient({ swaps }: Props) {
