@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { verifyAdminSession } from './actions'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -23,20 +24,13 @@ export default function LoginPage() {
       return
     }
 
-    // Check admin flag on profile
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('is_admin')
-      .eq('id', data.user.id)
-      .single()
-
-    if (!profile?.is_admin) {
+    const access = await verifyAdminSession()
+    if (!access.isAdmin) {
       await supabase.auth.signOut()
-      setError('You do not have admin access.')
+      setError(access.error === 'Admin access required' ? 'You do not have admin access.' : access.error)
       setLoading(false)
       return
     }
-
     router.replace('/')
   }
 

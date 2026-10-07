@@ -2,7 +2,7 @@
 import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
-import { createAdminClient } from '@/lib/supabase'
+import { adminApi } from '@/lib/backend'
 import Link from 'next/link'
 import Sidebar from '@/components/Sidebar'
 import StatusBadge from '@/components/StatusBadge'
@@ -41,81 +41,15 @@ export default async function Dashboard() {
   const user = await getSessionUser()
   if (!user) redirect('/login')
 
-  const db = createAdminClient()
-
-  const [
-    pendingRes,
-    deliveredRes,
-    totalOrdersRes,
-    usersRes,
-    activeProdRes,
-    swappedProdRes,
-    recentOrdersRes,
-  ] = await Promise.all([
-    // Awaiting verification — all three pre-ship statuses
-    db.from('orders').select('id', { count: 'exact', head: true })
-      .in('status', ['payment_verification', 'product_verification', 'item_verification']),
-
-    // Delivered count
-    db.from('orders').select('id', { count: 'exact', head: true })
-      .eq('status', 'delivered'),
-
-    // Total orders
-    db.from('orders').select('id', { count: 'exact', head: true }),
-
-    // Total users
-    db.from('profiles').select('id', { count: 'exact', head: true }),
-
-    // Active listings
-    db.from('products').select('id', { count: 'exact', head: true })
-      .eq('status', 'active'),
-
-    // Swapped products
-    db.from('products').select('id', { count: 'exact', head: true })
-      .eq('status', 'svapped'),
-
-    // Recent 6 orders with profile join
-    db.from('orders')
-      .select(`
-        id,
-        swap_request_id,
-        delivery_name,
-        delivery_city,
-        total,
-        status,
-        created_at,
-        from_profile:profiles!orders_from_user_id_fkey(full_name)
-      `)
-      .order('created_at', { ascending: false })
-      .limit(6),
-  ])
-
+  const result = (await adminApi('/admin/dashboard')).data
   const stats = {
-    pendingVerification: pendingRes.count ?? 0,
-    totalOrders: totalOrdersRes.count ?? 0,
-    totalUsers: usersRes.count ?? 0,
-    activeProducts: activeProdRes.count ?? 0,
-    swappedProducts: swappedProdRes.count ?? 0,
-    deliveredOrders: deliveredRes.count ?? 0,
+    pendingVerification: result.pendingVerification, totalOrders: result.totalOrders,
+    totalUsers: result.totalUsers, activeProducts: result.activeProducts,
+    swappedProducts: result.swappedProducts, deliveredOrders: result.deliveredOrders,
   }
-
-  interface RecentOrder {
-    id: string
-    swap_request_id: string
-    delivery_name: string
-    delivery_city: string
-    total: number
-    status: string
-    created_at: string
-    from_profile?: { full_name?: string } | { full_name?: string }[] | null
-  }
-
-  const recentOrders = (recentOrdersRes.data ?? []) as unknown as RecentOrder[]
-
-  function getName(o: RecentOrder) {
-    const p = Array.isArray(o.from_profile) ? o.from_profile[0] : o.from_profile
-    return p?.full_name || o.delivery_name || 'Guest User'
-  }
+  interface RecentOrder { id:string; swap_request_id:string; delivery_name:string; delivery_city:string; total:number; status:string; created_at:string; from_profile?:{full_name?:string}|null }
+  const recentOrders = result.recentOrders as RecentOrder[]
+  function getName(o:RecentOrder){return o.from_profile?.full_name||o.delivery_name||'Guest User'}
 
   return (
     <div className="flex min-h-screen bg-black text-zinc-100">

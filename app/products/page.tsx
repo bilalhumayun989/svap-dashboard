@@ -31,10 +31,9 @@ export default function ProductsPage() {
   }, [])
 
   async function fetchProducts() {
-    const { data } = await supabase
-      .from('products')
-      .select('id, title, condition, image_urls, status, created_at, user_id, owner:profiles!user_id(username, full_name)')
-      .order('created_at', { ascending: false })
+    const response = await fetch('/api/admin/products', { cache: 'no-store' })
+    const payload = await response.json()
+    const data = response.ok ? payload.data : []
 
     setProducts((data ?? []) as unknown as Product[])
     setLoading(false)
@@ -42,7 +41,7 @@ export default function ProductsPage() {
 
   async function removeProduct(id: string) {
     if (!confirm('Remove this product listing?')) return
-    await supabase.from('products').update({ status: 'removed' }).eq('id', id)
+    await fetch('/api/admin/products/'+encodeURIComponent(id), { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:'removed'}) })
     fetchProducts()
   }
 

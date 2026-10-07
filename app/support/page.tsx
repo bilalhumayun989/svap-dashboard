@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { createServerClient } from '@supabase/ssr'
-import { createAdminClient } from '@/lib/supabase'
+import { adminApi } from '@/lib/backend'
 import Sidebar from '@/components/Sidebar'
 import SupportClient from '@/components/SupportClient'
 import type { SupportTicket } from '@/lib/types'
@@ -30,77 +30,10 @@ async function getSessionUser() {
 
 // ─── Server Actions ───────────────────────────────────────────────────────────
 
-async function sendReply(ticketId: string, replyText: string) {
-  'use server'
-  const db = createAdminClient()
-  await db
-    .from('support_tickets')
-    .update({ admin_reply: replyText, status: 'replied', replied_at: new Date().toISOString() })
-    .eq('id', ticketId)
+async function sendReply(ticketId:string,replyText:string){'use server';await adminApi('/admin/support/'+encodeURIComponent(ticketId)+'/reply',{method:'PATCH',body:JSON.stringify({admin_reply:replyText})});revalidatePath('/support')}
+async function closeTicket(ticketId:string,resolutionNote:string){'use server';await adminApi('/admin/support/'+encodeURIComponent(ticketId)+'/close',{method:'PATCH',body:JSON.stringify({resolution_note:resolutionNote})});revalidatePath('/support')}
+async function reopenTicket(ticketId:string){'use server';await adminApi('/admin/support/'+encodeURIComponent(ticketId)+'/reopen',{method:'PATCH',body:JSON.stringify({})});revalidatePath('/support')}
 
-  // Notify user
-  const { data: ticket } = await db
-    .from('support_tickets')
-    .select('user_id, subject')
-    .eq('id', ticketId)
-    .single()
-
-  if (ticket) {
-    await db.from('notifications').insert({
-      user_id: ticket.user_id,
-      type: 'support',
-      title: 'Support Reply 💬',
-      body: `Admin has replied to your support ticket: "${ticket.subject}"`,
-      route: '/support',
-    })
-  }
-
-  revalidatePath('/support')
-}
-
-async function closeTicket(ticketId: string, resolutionNote: string) {
-  'use server'
-  const db = createAdminClient()
-  await db
-    .from('support_tickets')
-    .update({
-      status: 'closed',
-      closed_at: new Date().toISOString(),
-      resolution_note: resolutionNote || null,
-    })
-    .eq('id', ticketId)
-
-  // Notify user
-  const { data: ticket } = await db
-    .from('support_tickets')
-    .select('user_id, subject')
-    .eq('id', ticketId)
-    .single()
-
-  if (ticket) {
-    await db.from('notifications').insert({
-      user_id: ticket.user_id,
-      type: 'support',
-      title: 'Support Ticket Closed ✅',
-      body: `Your support ticket "${ticket.subject}" has been closed. If you need further help, please open a new ticket.`,
-      route: '/support',
-    })
-  }
-
-  revalidatePath('/support')
-}
-
-async function reopenTicket(ticketId: string) {
-  'use server'
-  const db = createAdminClient()
-  await db
-    .from('support_tickets')
-    .update({ status: 'open', closed_at: null, resolution_note: null })
-    .eq('id', ticketId)
-  revalidatePath('/support')
-}
-
-// ─── Page ─────────────────────────────────────────────────────────────────────
 export default async function SupportPage({
   searchParams,
 }: {
@@ -112,14 +45,11 @@ export default async function SupportPage({
   const { tab } = await searchParams
   const activeTab = tab === 'closed' ? 'closed' : 'open'
 
-  const db = createAdminClient()
+  let data: SupportTicket[] = []
+  let error: {message:string}|null = null
+  try { data=(await adminApi('/admin/support')).data as SupportTicket[] } catch(e) { error={message:e instanceof Error?e.message:'Could not load tickets'} }
 
-  const { data, error } = await db
-    .from('support_tickets')
-    .select('*, profile:profiles!user_id(username, full_name, email)')
-    .order('created_at', { ascending: false })
-
-  const allTickets = (data ?? []) as SupportTicket[]
+  const allTickets = data
 
   const openTickets   = allTickets.filter(t => t.status === 'open' || t.status === 'replied')
   const closedTickets = allTickets.filter(t => t.status === 'closed')

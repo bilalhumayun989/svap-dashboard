@@ -24,29 +24,9 @@ export default function UsersPage() {
   }, [])
 
   async function fetchUsers() {
-    const { data } = await supabase
-      .from('profiles')
-      .select('id, username, full_name, email, phone, city, avatar_url, created_at')
-      .order('created_at', { ascending: false })
-
-    if (!data) {
-      setLoading(false)
-      return
-    }
-
-    // Get product counts
-    const { data: productCounts } = await supabase
-      .from('products')
-      .select('owner_id')
-
-    const countMap: Record<string, number> = {}
-    for (const p of productCounts ?? []) {
-      if (p.owner_id) {
-        countMap[p.owner_id] = (countMap[p.owner_id] ?? 0) + 1
-      }
-    }
-
-    setUsers(data.map((u) => ({ ...u, product_count: countMap[u.id] ?? 0 })) as UserProfile[])
+    const response = await fetch('/api/admin/users', { cache: 'no-store' })
+    const payload = await response.json()
+    setUsers(response.ok ? payload.data as UserProfile[] : [])
     setLoading(false)
   }
 

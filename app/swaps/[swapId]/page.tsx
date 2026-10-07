@@ -6,9 +6,7 @@ import { redirect, notFound } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { createServerClient } from '@supabase/ssr'
-import { createAdminClient } from '@/lib/supabase'
-import { fixNotifications } from '@/lib/notifications'
-import { cancelOrderAndRestoreItems } from '@/lib/cancelOrder'
+import { adminApi } from '@/lib/backend'
 import Link from 'next/link'
 import Sidebar from '@/components/Sidebar'
 import StatusBadge from '@/components/StatusBadge'
@@ -37,241 +35,28 @@ async function getSessionUser() {
 }
 
 // ─── Revalidate helper ────────────────────────────────────────────────────────
-function revalidateAll(swapId: string) {
-  revalidatePath('/swaps')
-  revalidatePath(`/swaps/${swapId}`)
-  revalidatePath('/orders')
+function revalidateAll(swapId: string) { revalidatePath('/swaps'); revalidatePath('/swaps/'+swapId); revalidatePath('/orders') }
+
+function makeAction(swapId: string, action: string) {
+ async function run(orderId: string, data: Record<string, unknown> = {}) {
+  'use server'
+  await adminApi('/admin/orders/'+encodeURIComponent(orderId)+'/actions',{method:'POST',body:JSON.stringify({action,...data})})
+  revalidateAll(swapId)
+ }
+ return run
 }
+const makeApprovePayment=(id:string)=>makeAction(id,'approve_payment')
+const makeRejectPayment=(id:string)=>makeAction(id,'reject_payment')
+const makeVerifyItem=(id:string)=>makeAction(id,'verify_product')
+const makeItemVerificationFailed=(id:string)=>makeAction(id,'fail_product')
+const makeAssignDelivery=(id:string)=>{const run=makeAction(id,'assign_delivery');async function assign(orderId:string,type:'courier'|'self'){'use server';await run(orderId,{delivery_type:type})}return assign}
+const makeMarkShipped=(id:string)=>{const run=makeAction(id,'mark_shipped');async function ship(orderId:string,trackingNumber:string|null){'use server';await run(orderId,{tracking_number:trackingNumber})}return ship}
+const makeMarkDelivered=(id:string)=>makeAction(id,'mark_delivered')
+const makeSaveAdminNote=(id:string)=>{const run=makeAction(id,'save_note');async function save(orderId:string,note:string){'use server';await run(orderId,{note})}return save}
+const makeCancelSwap=(id:string)=>makeAction(id,'cancel')
+const makeUndoPaymentApproval=(id:string)=>makeAction(id,'undo_payment')
+const makeUndoItemVerification=(id:string)=>makeAction(id,'undo_product')
 
-// ─── Shared: find partner user id ─────────────────────────────────────────────
-async function findPartnerUserId(
-  db: ReturnType<typeof createAdminClient>,
-  orderId: string,
-  swapRequestId: string,
-): Promise<string | null> {
-  const { data } = await db
-    .from('orders')
-    .select('from_user_id')
-    .eq('swap_request_id', swapRequestId)
-    .neq('id', orderId)
-    .maybeSingle()
-  return data?.from_user_id ?? null
-}
-
-// ─── Server Actions ───────────────────────────────────────────────────────────
-// Every action operates ONLY on the specific order id passed.
-// The swapId is captured via closure from the page params.
-
-async function makeApprovePayment(swapId: string) {
-  async function approvePayment(orderId: string) {
-    'use server'
-    const db = createAdminClient()
-    const { data: order } = await db
-      .from('orders').select('status, from_user_id, swap_request_id').eq('id', orderId).single()
-    if (!order || order.status !== 'payment_verification') return
-    await db.from('orders').update({ status: 'product_verification' }).eq('id', orderId)
-    const partnerUserId = await findPartnerUserId(db, orderId, order.swap_request_id)
-    await fixNotifications(db, orderId, order.from_user_id, partnerUserId,
-      'Payment Verified ✅',
-      'Your payment has been verified! We are now checking your item before dispatch.',
-      partnerUserId ? 'Svap Partner Update 🔄' : null,
-      partnerUserId ? 'Your svap partner has confirmed their payment. Your own order will be processed independently.' : null,
-    )
-    revalidateAll(swapId)
-  }
-  return approvePayment
-}
-
-async function makeRejectPayment(swapId: string) {
-  async function rejectPayment(orderId: string) {
-    'use server'
-    const db = createAdminClient()
-    const { data: order } = await db
-      .from('orders').select('from_user_id, swap_request_id').eq('id', orderId).single()
-    await db.from('orders').update({ status: 'cancelled' }).eq('id', orderId)
-    if (!order) return
-    const partnerUserId = await findPartnerUserId(db, orderId, order.swap_request_id)
-    await fixNotifications(db, orderId, order.from_user_id, partnerUserId,
-      'Payment Rejected ❌',
-      'Your payment could not be verified. Please contact support for assistance.',
-      partnerUserId ? 'Svap Update ⚠️' : null,
-      partnerUserId ? "Your svap partner's payment was rejected. This svap will not proceed further." : null,
-    )
-    revalidateAll(swapId)
-  }
-  return rejectPayment
-}
-
-async function makeVerifyItem(swapId: string) {
-  async function verifyItem(orderId: string) {
-    'use server'
-    const db = createAdminClient()
-    const { data: order } = await db
-      .from('orders').select('status, from_user_id, swap_request_id').eq('id', orderId).single()
-    if (!order || order.status !== 'product_verification') return
-    await db.from('orders').update({ status: 'item_verification' }).eq('id', orderId)
-    const partnerUserId = await findPartnerUserId(db, orderId, order.swap_request_id)
-    await fixNotifications(db, orderId, order.from_user_id, partnerUserId,
-      'Product Verified ✅',
-      'Your product has been verified! We are now performing a final item check before shipping.',
-      partnerUserId ? 'Svap Partner Update 🔄' : null,
-      partnerUserId ? "Your svap partner's product has been verified. Their order is progressing independently." : null,
-    )
-    revalidateAll(swapId)
-  }
-  return verifyItem
-}
-
-async function makeItemVerificationFailed(swapId: string) {
-  async function itemVerificationFailed(orderId: string) {
-    'use server'
-    const db = createAdminClient()
-    const { data: order } = await db
-      .from('orders').select('status, from_user_id, swap_request_id').eq('id', orderId).single()
-    if (!order || order.status !== 'product_verification') return
-    await db.from('orders').update({ status: 'cancelled' }).eq('id', orderId)
-    const partnerUserId = await findPartnerUserId(db, orderId, order.swap_request_id)
-    await fixNotifications(db, orderId, order.from_user_id, partnerUserId,
-      'Item Verification Failed ❌',
-      'Unfortunately, your item did not pass verification. Your order has been cancelled. Please contact support for assistance.',
-      partnerUserId ? 'Svap Update ⚠️' : null,
-      partnerUserId ? "Your svap partner's item did not pass verification. This svap cannot proceed." : null,
-    )
-    revalidateAll(swapId)
-  }
-  return itemVerificationFailed
-}
-
-async function makeAssignDelivery(swapId: string) {
-  async function assignDelivery(orderId: string, type: 'courier' | 'self') {
-    'use server'
-    const db = createAdminClient()
-    await db.from('orders').update({ delivery_type: type }).eq('id', orderId)
-    revalidateAll(swapId)
-  }
-  return assignDelivery
-}
-
-async function makeMarkShipped(swapId: string) {
-  async function markShipped(orderId: string, trackingNumber: string | null) {
-    'use server'
-    const db = createAdminClient()
-    const { data: order } = await db
-      .from('orders').select('from_user_id, swap_request_id, delivery_type').eq('id', orderId).single()
-    await db.from('orders').update({
-      status: 'shipped',
-      ...(trackingNumber ? { tracking_number: trackingNumber } : {}),
-    }).eq('id', orderId)
-    if (!order) return
-    const partnerUserId = await findPartnerUserId(db, orderId, order.swap_request_id)
-    const trackingNote = trackingNumber ? ` Tracking: ${trackingNumber}` : ''
-    const deliveryNote = order.delivery_type === 'self' ? 'Our rider is on the way to you.' : 'Your item is being sent via courier.'
-    await fixNotifications(db, orderId, order.from_user_id, partnerUserId,
-      'Order Shipped ',
-      `Your order has been shipped! ${deliveryNote}${trackingNote}`,
-      partnerUserId ? 'Svap Partner Update ' : null,
-      partnerUserId ? "Your svap partner's item has been shipped. Your own order is being processed separately." : null,
-    )
-    revalidateAll(swapId)
-  }
-  return markShipped
-}
-
-async function makeMarkDelivered(swapId: string) {
-  async function markDelivered(orderId: string) {
-    'use server'
-    const db = createAdminClient()
-    const { data: order } = await db
-      .from('orders').select('from_user_id, swap_request_id').eq('id', orderId).single()
-    await db.from('orders').update({ status: 'delivered' }).eq('id', orderId)
-    if (!order) return
-    const partnerUserId = await findPartnerUserId(db, orderId, order.swap_request_id)
-
-    // Check if both sides now delivered
-    const { data: swapOrders } = await db
-      .from('orders').select('id, status').eq('swap_request_id', order.swap_request_id)
-    const allDelivered =
-      (swapOrders ?? []).length >= 2 &&
-      (swapOrders ?? []).every((o: { status: string }) => o.status === 'delivered')
-    if (allDelivered) {
-      await db.from('swap_requests').update({ status: 'completed' }).eq('id', order.swap_request_id)
-    }
-
-    await fixNotifications(db, orderId, order.from_user_id, partnerUserId,
-      'Order Delivered 🎉',
-      'Your item has been delivered! Enjoy your SVAP.',
-      partnerUserId && !allDelivered ? 'SVAP Partner Update ✅' : null,
-      partnerUserId && !allDelivered ? "Your SVAP partner's item has been delivered. You will receive a separate notification when your item is delivered." : null,
-    )
-    revalidateAll(swapId)
-  }
-  return markDelivered
-}
-
-async function makeSaveAdminNote(swapId: string) {
-  async function saveAdminNote(orderId: string, note: string) {
-    'use server'
-    const db = createAdminClient()
-    await db.from('orders').update({ admin_notes: note || null }).eq('id', orderId)
-    revalidateAll(swapId)
-  }
-  return saveAdminNote
-}
-
-async function makeCancelSwap(swapId: string) {
-  async function cancelSwap(anyOrderId: string) {
-    'use server'
-    await cancelOrderAndRestoreItems(anyOrderId)
-    revalidateAll(swapId)
-  }
-  return cancelSwap
-}
-
-// ─── Undo actions ─────────────────────────────────────────────────────────────
-
-// Undo payment approval: product_verification → payment_verification
-async function makeUndoPaymentApproval(swapId: string) {
-  async function undoPaymentApproval(orderId: string) {
-    'use server'
-    const db = createAdminClient()
-    const { data: order } = await db
-      .from('orders').select('status, from_user_id, swap_request_id').eq('id', orderId).single()
-    if (!order || order.status !== 'product_verification') return
-    await db.from('orders').update({ status: 'payment_verification' }).eq('id', orderId)
-    const partnerUserId = await findPartnerUserId(db, orderId, order.swap_request_id)
-    await fixNotifications(db, orderId, order.from_user_id, partnerUserId,
-      'Payment Verification Pending 🔄',
-      'Your payment approval has been reversed. Admin will re-review your payment.',
-      partnerUserId ? 'Svap Partner Update 🔄' : null,
-      partnerUserId ? "Your svap partner's payment approval was reversed by admin." : null,
-    )
-    revalidateAll(swapId)
-  }
-  return undoPaymentApproval
-}
-
-// Undo item verification: item_verification → product_verification
-async function makeUndoItemVerification(swapId: string) {
-  async function undoItemVerification(orderId: string) {
-    'use server'
-    const db = createAdminClient()
-    const { data: order } = await db
-      .from('orders').select('status, from_user_id, swap_request_id').eq('id', orderId).single()
-    if (!order || order.status !== 'item_verification') return
-    await db.from('orders').update({ status: 'product_verification' }).eq('id', orderId)
-    const partnerUserId = await findPartnerUserId(db, orderId, order.swap_request_id)
-    await fixNotifications(db, orderId, order.from_user_id, partnerUserId,
-      'Item Re-Verification Required 🔄',
-      'Your item verification has been reversed. Admin will re-inspect your item.',
-      partnerUserId ? 'Svap Partner Update 🔄' : null,
-      partnerUserId ? "Your svap partner's item verification was reversed by admin." : null,
-    )
-    revalidateAll(swapId)
-  }
-  return undoItemVerification
-}
-
-// ─── Page ─────────────────────────────────────────────────────────────────────
 export default async function SwapDetailPage({
   params,
 }: {
@@ -281,33 +66,10 @@ export default async function SwapDetailPage({
   if (!user) redirect('/login')
 
   const { swapId } = await params
-  const db = createAdminClient()
-
-  // Fetch swap_request + profiles + products
-  const { data: swap, error: swapError } = await db
-    .from('swap_requests')
-    .select(`
-      id, status, created_at, premium_amount, from_user_id, to_user_id,
-      sender:profiles!swap_requests_from_user_id_fkey(id, username, full_name, email, phone),
-      receiver:profiles!swap_requests_to_user_id_fkey(id, username, full_name, email, phone),
-      offered_product:products!swap_requests_offered_product_id_fkey(id, title, image_urls),
-      requested_product:products!swap_requests_requested_product_id_fkey(id, title, image_urls)
-    `)
-    .eq('id', swapId)
-    .single()
-
-  if (swapError || !swap) notFound()
-
-  // Fetch both orders for this swap
-  const { data: orders } = await db
-    .from('orders')
-    .select(`
-      id, from_user_id, to_user_id, status, delivery_type, tracking_number,
-      transaction_ref, shipping_cost, premium_amount, discount, total,
-      delivery_name, delivery_phone, delivery_address, delivery_city,
-      admin_notes, created_at
-    `)
-    .eq('swap_request_id', swapId)
+  let loaded: any
+  try { loaded=(await adminApi('/admin/swaps/'+encodeURIComponent(swapId))).data } catch { notFound() }
+  const swap=loaded
+  const orders=loaded.orders as SwapPartyOrder[]
 
   const allOrders = (orders ?? []) as SwapPartyOrder[]
 

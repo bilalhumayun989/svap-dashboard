@@ -4,7 +4,7 @@
 import { redirect, notFound } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
-import { createAdminClient } from '@/lib/supabase'
+import { adminApi } from '@/lib/backend'
 
 async function getSessionUser() {
   const cookieStore = await cookies()
@@ -34,13 +34,8 @@ export default async function OrderDetailRedirectPage({
   if (!user) redirect('/login')
 
   const { id } = await params
-  const db = createAdminClient()
-
-  const { data: order } = await db
-    .from('orders')
-    .select('swap_request_id')
-    .eq('id', id)
-    .single()
+  let order: {swap_request_id:string}|null=null
+  try { order=(await adminApi('/admin/orders/'+encodeURIComponent(id))).data } catch { notFound() }
 
   if (!order?.swap_request_id) notFound()
 
